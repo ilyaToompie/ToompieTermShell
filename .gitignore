@@ -69,3 +69,6 @@ DerivedData/
 *.xcuserstate
 .DS_Store
 >>>>>>> 8f5dad1 (.app)
+*.app
+.build/
+DerivedData/
