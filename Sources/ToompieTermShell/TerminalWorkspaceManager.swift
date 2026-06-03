@@ -1,24 +1,53 @@
 import AppKit
 import Combine
+import CoreImage
 import Foundation
 import SwiftTerm
+import UniformTypeIdentifiers
+
+enum TerminalTabKind {
+    case shell
+    case editor
+}
 
 final class TerminalTabModel: ObservableObject, Identifiable {
     let id: UUID
+    let kind: TerminalTabKind
     @Published var title: String
+    @Published var hasCustomTitle: Bool
     @Published var currentDirectory: String?
     @Published var isRunning: Bool
     let terminalView: ManagedLocalTerminalView
     let processDelegate: TerminalProcessDelegate
 
-    init(title: String) {
+    @Published var editorText: String
+    @Published var editorStatus: String
+    var localPath: String?
+    var onSave: ((String) -> Void)?
+
+    init(title: String, kind: TerminalTabKind = .shell) {
         self.id = UUID()
+        self.kind = kind
         self.title = title
-        self.isRunning = true
+        self.hasCustomTitle = kind == .editor
+        self.isRunning = kind == .shell
         self.terminalView = ManagedLocalTerminalView(frame: .zero)
         self.processDelegate = TerminalProcessDelegate()
+        self.editorText = ""
+        self.editorStatus = ""
         self.processDelegate.owner = self
         self.terminalView.processDelegate = processDelegate
+    }
+
+    func rename(_ newTitle: String) {
+        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        title = trimmed
+        hasCustomTitle = true
+    }
+
+    func saveEditor() {
+        onSave?(editorText)
     }
 }
 
@@ -45,12 +74,23 @@ final class TerminalWorkspaceManager: ObservableObject {
     @Published private(set) var visiblePanelCount: Int
     @Published private(set) var focusedPanelIndex: Int
 
+    private let prefs = AppPreferences.shared
+    private var cancellables: Set<AnyCancellable> = []
+
     init() {
         self.panels = (0..<4).map { TerminalPanelModel(index: $0) }
         let savedCount = UserDefaults.standard.integer(forKey: "visiblePanelCount")
         self.visiblePanelCount = savedCount == 0 ? 1 : min(max(savedCount, 1), 4)
         self.focusedPanelIndex = 0
         ensureVisiblePanelsHaveTabs()
+
+        prefs.$revision
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.applyAppearanceToAll()
+            }
+            .store(in: &cancellables)
     }
 
     func setVisiblePanelCount(_ count: Int) {
@@ -73,7 +113,7 @@ final class TerminalWorkspaceManager: ObservableObject {
         guard let panel = panel(panelIndex) else { return nil }
         let tabNumber = panel.tabs.count + 1
         let tab = TerminalTabModel(title: title ?? "Shell \(tabNumber)")
-        configure(tab.terminalView)
+        configure(tab.terminalView, panelIndex: panelIndex)
         panel.tabs.append(tab)
         panel.selectedTabID = tab.id
         focusPanel(panelIndex)
@@ -92,9 +132,50 @@ final class TerminalWorkspaceManager: ObservableObject {
 
     func closeActiveTab(in panelIndex: Int) {
         guard let panel = panel(panelIndex), let selected = panel.selectedTab else { return }
-        selected.terminalView.terminate()
+        if selected.kind == .shell {
+            selected.terminalView.terminate()
+        }
         panel.tabs.removeAll { $0.id == selected.id }
         panel.selectedTabID = panel.tabs.last?.id
+    }
+
+    @discardableResult
+    func openLocalFileEditor(path: String, in panelIndex: Int? = nil) -> TerminalTabModel? {
+        let index = panelIndex ?? focusedPanelIndex
+        guard let panel = panel(index) else { return nil }
+        let name = (path as NSString).lastPathComponent
+        let tab = TerminalTabModel(title: name.isEmpty ? "editor" : name, kind: .editor)
+        tab.localPath = path
+        tab.editorText = (try? String(contentsOfFile: path, encoding: .utf8)) ?? ""
+        tab.onSave = { text in try? text.write(toFile: path, atomically: true, encoding: .utf8) }
+        panel.tabs.append(tab)
+        panel.selectedTabID = tab.id
+        focusPanel(index)
+        return tab
+    }
+
+    func openRemoteFileEditor(shortcut: SSHShortcut, remotePath: String, in panelIndex: Int? = nil) {
+        let index = panelIndex ?? focusedPanelIndex
+        guard let panel = panel(index) else { return }
+        let name = (remotePath as NSString).lastPathComponent
+        let tab = TerminalTabModel(title: name.isEmpty ? "remote" : name, kind: .editor)
+        tab.editorStatus = "fetching"
+        panel.tabs.append(tab)
+        panel.selectedTabID = tab.id
+        focusPanel(index)
+        RemoteFileService.fetch(shortcut: shortcut, remotePath: remotePath) { result in
+            switch result {
+            case .success(let payload):
+                tab.editorText = payload.text
+                tab.localPath = payload.localPath
+                tab.editorStatus = ""
+                tab.onSave = { newText in
+                    RemoteFileService.upload(shortcut: shortcut, localPath: payload.localPath, remotePath: remotePath, text: newText) { _ in }
+                }
+            case .failure(let error):
+                tab.editorStatus = error.localizedDescription
+            }
+        }
     }
 
     func selectTab(_ tabID: UUID, in panelIndex: Int) {
@@ -104,6 +185,14 @@ final class TerminalWorkspaceManager: ObservableObject {
     }
 
     func send(_ text: String, to panelIndex: Int? = nil) {
+        let index = panelIndex ?? focusedPanelIndex
+        guard let tab = activeTabCreatingIfNeeded(in: index) else { return }
+        let data = Array(text.utf8)
+        tab.terminalView.send(source: tab.terminalView, data: data[...])
+        focusPanel(index)
+    }
+
+    func insertText(_ text: String, to panelIndex: Int? = nil) {
         let index = panelIndex ?? focusedPanelIndex
         guard let tab = activeTabCreatingIfNeeded(in: index) else { return }
         let data = Array(text.utf8)
@@ -144,20 +233,42 @@ final class TerminalWorkspaceManager: ObservableObject {
         }
     }
 
-    private func configure(_ terminal: ManagedLocalTerminalView) {
+    private func applyAppearanceToAll() {
+        for (index, panel) in panels.enumerated() {
+            for tab in panel.tabs {
+                applyAppearance(to: tab.terminalView, panelIndex: index)
+            }
+        }
+    }
+
+    private func configure(_ terminal: ManagedLocalTerminalView, panelIndex: Int) {
         terminal.autoresizingMask = [.width, .height]
-        terminal.nativeForegroundColor = NSColor(calibratedRed: 0.88, green: 0.90, blue: 0.92, alpha: 1)
-        terminal.nativeBackgroundColor = NSColor(calibratedRed: 0.07, green: 0.08, blue: 0.10, alpha: 1)
-        terminal.caretColor = .systemGreen
-        terminal.getTerminal().setCursorStyle(.steadyBlock)
         terminal.wantsLayer = true
-        terminal.layer?.backgroundColor = terminal.nativeBackgroundColor.cgColor
+        terminal.onFilesDropped = { [weak self] paths in
+            guard let self else { return }
+            let joined = paths.map { ShellSafety.singleQuoted($0) }.joined(separator: " ")
+            self.insertText(joined + " ", to: panelIndex)
+        }
         do {
             terminal.metalBufferingMode = .perFrameAggregated
             try terminal.setUseMetal(false)
         } catch {
-            // SwiftTerm automatically falls back to its AppKit renderer.
         }
+        applyAppearance(to: terminal, panelIndex: panelIndex)
+    }
+
+    private func applyAppearance(to terminal: ManagedLocalTerminalView, panelIndex: Int) {
+        terminal.font = prefs.resolvedFont()
+        terminal.nativeForegroundColor = prefs.foregroundColor
+        let opacity = CGFloat(min(max(prefs.terminalOpacity, 0.3), 1.0))
+        let bg = prefs.backgroundColor.withAlphaComponent(opacity)
+        terminal.nativeBackgroundColor = bg
+        terminal.caretColor = prefs.caretColor
+        terminal.getTerminal().setCursorStyle(prefs.cursorStyle.swiftTermStyle)
+        terminal.layer?.backgroundColor = bg.cgColor
+        terminal.layer?.isOpaque = opacity >= 0.999
+        terminal.setAliased(prefs.disableAntialiasing)
+        terminal.needsDisplay = true
     }
 
     static func defaultShell() -> String {
@@ -168,7 +279,80 @@ final class TerminalWorkspaceManager: ObservableObject {
     }
 }
 
-final class ManagedLocalTerminalView: LocalProcessTerminalView {}
+final class ManagedLocalTerminalView: LocalProcessTerminalView {
+    var onFilesDropped: (([String]) -> Void)?
+    private var dropConfigured = false
+    private var aliased = false
+
+    func setAliased(_ value: Bool) {
+        aliased = value
+        applyAliasing()
+        needsDisplay = true
+    }
+
+    private func applyAliasing() {
+        wantsLayer = true
+        guard let layer else { return }
+        let backing = window?.backingScaleFactor ?? 2.0
+        if aliased {
+            layer.shouldRasterize = true
+            layer.rasterizationScale = 1.0
+            layer.magnificationFilter = .nearest
+            layer.minificationFilter = .nearest
+        } else {
+            layer.shouldRasterize = false
+            layer.rasterizationScale = backing
+            layer.magnificationFilter = .linear
+            layer.minificationFilter = .linear
+        }
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        applyAliasing()
+    }
+
+    private func configureDropIfNeeded() {
+        guard !dropConfigured else { return }
+        dropConfigured = true
+        registerForDraggedTypes([.fileURL])
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        configureDropIfNeeded()
+    }
+
+    override var isOpaque: Bool { false }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        return hasFileURLs(sender) ? .copy : []
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        return hasFileURLs(sender) ? .copy : []
+    }
+
+    override func prepareForDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        return hasFileURLs(sender)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        let urls = fileURLs(from: sender)
+        guard !urls.isEmpty else { return false }
+        onFilesDropped?(urls.map { $0.path })
+        return true
+    }
+
+    private func hasFileURLs(_ sender: NSDraggingInfo) -> Bool {
+        sender.draggingPasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
+    }
+
+    private func fileURLs(from sender: NSDraggingInfo) -> [URL] {
+        let objects = sender.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL]
+        return objects ?? []
+    }
+}
 
 final class TerminalProcessDelegate: NSObject, LocalProcessTerminalViewDelegate {
     weak var owner: TerminalTabModel?
@@ -177,7 +361,7 @@ final class TerminalProcessDelegate: NSObject, LocalProcessTerminalViewDelegate 
 
     func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
         DispatchQueue.main.async { [weak self] in
-            guard let owner = self?.owner else { return }
+            guard let owner = self?.owner, !owner.hasCustomTitle else { return }
             owner.title = title.isEmpty ? owner.title : title
         }
     }

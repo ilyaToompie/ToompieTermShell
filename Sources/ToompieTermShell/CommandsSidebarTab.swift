@@ -5,116 +5,101 @@ import SwiftUI
 struct CommandsSidebarTab: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var terminalManager: TerminalWorkspaceManager
-    @Query(sort: \CommandShortcut.name) private var commands: [CommandShortcut]
+    @EnvironmentObject private var loc: LocalizationManager
+    @EnvironmentObject private var prefs: AppPreferences
+    @EnvironmentObject private var scope: ScopeManager
+    @Query(sort: \CommandShortcut.name) private var allCommands: [CommandShortcut]
+    @Query(sort: \Tag.name) private var tags: [Tag]
+    @AppStorage("commandsSimple") private var simple = false
+    @State private var search = ""
+    @State private var filterTag: UUID?
     @State private var showingAddSheet = false
     @State private var editingCommand: CommandShortcut?
+
+    private var commands: [CommandShortcut] {
+        allCommands.filter { command in
+            guard command.projectID == scope.currentProjectID else { return false }
+            if let filterTag, !command.hasTag(filterTag) { return false }
+            if !search.isEmpty {
+                let q = search.lowercased()
+                return command.name.lowercased().contains(q) || command.command.lowercased().contains(q) || command.commandDescription.lowercased().contains(q)
+            }
+            return true
+        }
+    }
 
     var body: some View {
         VStack(spacing: 10) {
             HStack {
-                Label("Commands", systemImage: "terminal")
-                    .font(.headline)
-                Spacer()
-                Button {
-                    showingAddSheet = true
-                } label: {
-                    Image(systemName: "plus")
-                }
-                .help("Add command shortcut")
+                SectionTitle(title: loc("tab.commands"), systemImage: "terminal.fill")
+                Toggle(loc("view.simple"), isOn: $simple).toggleStyle(.switch).controlSize(.mini)
+                ShimmerAddButton { showingAddSheet = true }
             }
+            SearchField(text: $search, placeholder: loc("search.placeholder"))
+            TagFilterBar(tags: tags, selected: $filterTag)
 
             ScrollView {
-                LazyVStack(spacing: 8) {
-                    if commands.isEmpty {
-                        Text("No command shortcuts")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
+                LazyVStack(spacing: 6) {
+                    if commands.isEmpty { EmptyHint() }
                     ForEach(commands) { command in
-                        SidebarCard {
-                            HStack(alignment: .firstTextBaseline) {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(command.name)
-                                        .font(.subheadline.weight(.semibold))
-                                        .lineLimit(1)
-                                    if !command.commandDescription.isEmpty {
-                                        Text(command.commandDescription)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                            .lineLimit(2)
-                                    }
-                                    if !command.tags.isEmpty {
-                                        Text(command.tags)
-                                            .font(.caption2)
-                                            .foregroundStyle(.tertiary)
-                                            .lineLimit(1)
-                                    }
-                                }
-                                Spacer()
-                                Button {
-                                    editingCommand = command
-                                } label: {
-                                    Image(systemName: "pencil")
-                                }
-                                .buttonStyle(.plain)
-                                .help("Edit")
-
-                                Button {
-                                    modelContext.delete(command)
-                                } label: {
-                                    Image(systemName: "trash")
-                                }
-                                .buttonStyle(.plain)
-                                .foregroundStyle(.red)
-                                .help("Delete")
-                            }
-
-                            Text(command.command)
-                                .font(.system(.caption, design: .monospaced))
-                                .lineLimit(3)
-                                .foregroundStyle(.secondary)
-                                .textSelection(.enabled)
-
-                            HStack {
-                                Button {
-                                    Clipboard.copy(command.command)
-                                } label: {
-                                    Label("Copy", systemImage: "doc.on.doc")
-                                }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-
-                                Button {
-                                    run(command, in: terminalManager.focusedPanelIndex)
-                                } label: {
-                                    Label("Run", systemImage: "play.fill")
-                                }
-                                .buttonStyle(.bordered)
-                                .controlSize(.small)
-                            }
-
-                            TargetSegments { index in
-                                run(command, in: index)
-                            }
-                        }
+                        if simple { simpleRow(command) } else { detailedRow(command) }
                     }
                 }
             }
         }
-        .sheet(isPresented: $showingAddSheet) {
-            CommandShortcutEditor(command: nil)
-                .frame(width: 640)
+        .sheet(isPresented: $showingAddSheet) { CommandShortcutEditor(command: nil).frame(width: 640) }
+        .sheet(item: $editingCommand) { CommandShortcutEditor(command: $0).frame(width: 640) }
+    }
+
+    private func simpleRow(_ command: CommandShortcut) -> some View {
+        HStack(spacing: 8) {
+            Text(command.icon).font(.callout)
+            Text(command.name).font(.subheadline.weight(.medium)).lineLimit(1)
+            Spacer(minLength: 4)
+            TerminalTargetMenu(title: loc("common.run"), systemImage: "play.fill") { run(command, in: $0) }
+            Button(role: .destructive) { modelContext.delete(command) } label: { Image(systemName: "trash") }
+                .buttonStyle(.plain).foregroundStyle(.red)
         }
-        .sheet(item: $editingCommand) { command in
-            CommandShortcutEditor(command: command)
-                .frame(width: 640)
+        .padding(.horizontal, 10)
+        .frame(height: 38)
+        .background(Color.white.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.08)))
+    }
+
+    private func detailedRow(_ command: CommandShortcut) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(command.icon)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(command.name).font(.subheadline.weight(.semibold)).lineLimit(1)
+                    if !command.commandDescription.isEmpty {
+                        Text(command.commandDescription).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+                Spacer()
+                RowButtons(onEdit: { editingCommand = command }, onDelete: { modelContext.delete(command) })
+            }
+            Text(command.command)
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .textSelection(.enabled)
+            TagRowChips(ids: command.tagIDs, tags: tags)
+            HStack {
+                Button { Clipboard.copy(command.command) } label: { Label(loc("common.copy"), systemImage: "doc.on.doc") }
+                    .buttonStyle(.bordered).controlSize(.small)
+                TerminalTargetMenu(title: loc("common.run"), systemImage: "play.fill") { run(command, in: $0) }
+            }
         }
+        .padding(8)
+        .background(Color.white.opacity(0.05))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.08)))
     }
 
     private func run(_ command: CommandShortcut, in panelIndex: Int) {
-        guard CommandConfirmation.shouldRun(command.command) else { return }
+        guard !prefs.confirmDangerous || CommandConfirmation.shouldRun(command.command) else { return }
         let workingDirectory = command.workingDirectory.isEmpty ? nil : command.workingDirectory
         terminalManager.runCommand(command.command, workingDirectory: workingDirectory, in: panelIndex)
     }
@@ -123,90 +108,69 @@ struct CommandsSidebarTab: View {
 struct CommandShortcutEditor: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
+    @EnvironmentObject private var loc: LocalizationManager
+    @EnvironmentObject private var scope: ScopeManager
     let command: CommandShortcut?
 
     @State private var name: String
+    @State private var icon: String
     @State private var commandText: String
     @State private var workingDirectory: String
     @State private var description: String
-    @State private var tags: String
+    @State private var tagIDs: [UUID]
 
     init(command: CommandShortcut?) {
         self.command = command
         _name = State(initialValue: command?.name ?? "")
+        _icon = State(initialValue: command?.icon ?? "⚡️")
         _commandText = State(initialValue: command?.command ?? "")
         _workingDirectory = State(initialValue: command?.workingDirectory ?? "")
         _description = State(initialValue: command?.commandDescription ?? "")
-        _tags = State(initialValue: command?.tags ?? "")
+        _tagIDs = State(initialValue: command?.tagIDs ?? [])
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(command == nil ? "Add Command Shortcut" : "Edit Command Shortcut")
+            Text(command == nil ? loc("commands.add") : loc("common.edit"))
                 .font(.title3.weight(.semibold))
 
             VStack(alignment: .leading, spacing: 12) {
-                EditorRow("Name") {
-                    EditorTextField(title: "Name", text: $name)
-                }
-
-                EditorRow("Command") {
-                    TextField("Command", text: $commandText, axis: .vertical)
+                EditorRow(loc("ssh.icon")) { EmojiField(text: $icon) }
+                EditorRow(loc("common.name")) { EditorTextField(title: loc("common.name"), text: $name) }
+                EditorRow(loc("commands.command")) {
+                    TextField(loc("commands.command"), text: $commandText, axis: .vertical)
                         .font(.system(.body, design: .monospaced))
                         .textFieldStyle(.roundedBorder)
                         .lineLimit(5...10)
-                        .frame(minHeight: 120)
+                        .frame(minHeight: 110)
                 }
-
-                EditorRow("Working Directory") {
+                EditorRow(loc("commands.dir")) {
                     HStack(spacing: 8) {
-                        EditorTextField(title: "Working Directory", text: $workingDirectory)
-                        Button {
-                            selectDirectory()
-                        } label: {
-                            Image(systemName: "folder")
-                        }
-                        .help("Choose working directory")
+                        EditorTextField(title: loc("commands.dir"), text: $workingDirectory)
+                        Button { selectDirectory() } label: { Image(systemName: "folder") }
                     }
                 }
-
-                EditorRow("Description") {
-                    TextField("Description", text: $description, axis: .vertical)
-                        .textFieldStyle(.roundedBorder)
-                        .lineLimit(2...4)
+                EditorRow(loc("commands.description")) {
+                    TextField(loc("commands.description"), text: $description, axis: .vertical).textFieldStyle(.roundedBorder).lineLimit(2...4)
                 }
-
-                EditorRow("Tags / Group") {
-                    EditorTextField(title: "Tags / Group", text: $tags)
-                }
+                EditorRow(loc("tags.title")) { TagPicker(selectedIDs: $tagIDs) }
             }
 
-            HStack {
-                Spacer()
-                Button("Cancel") {
-                    dismiss()
-                }
-                Button("Save") {
-                    save()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(name.isEmpty || commandText.isEmpty)
-            }
+            EditorButtons(disabled: name.isEmpty || commandText.isEmpty, onCancel: { dismiss() }, onSave: save)
         }
         .padding(22)
     }
 
     private func save() {
-        let target = command ?? CommandShortcut(name: name, command: commandText)
+        let target = command ?? CommandShortcut(name: name, command: commandText, projectID: scope.currentProjectID)
         target.name = name
+        target.icon = icon.isEmpty ? "⚡️" : icon
         target.command = commandText
         target.workingDirectory = workingDirectory
         target.commandDescription = description
-        target.tags = tags
+        target.tagIDs = tagIDs
         target.updatedAt = Date()
-        if command == nil {
-            modelContext.insert(target)
-        }
+        if command == nil { modelContext.insert(target) }
         dismiss()
     }
 
@@ -218,5 +182,18 @@ struct CommandShortcutEditor: View {
         if panel.runModal() == .OK, let url = panel.url {
             workingDirectory = url.path
         }
+    }
+}
+
+struct EmojiField: View {
+    @Binding var text: String
+
+    var body: some View {
+        TextField("🙂", text: $text)
+            .textFieldStyle(.roundedBorder)
+            .frame(width: 60)
+            .onChange(of: text) { _, newValue in
+                if newValue.count > 2 { text = String(newValue.prefix(2)) }
+            }
     }
 }
