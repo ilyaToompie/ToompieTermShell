@@ -13,6 +13,7 @@ struct SettingsTab: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 languageCard
+                presetsCard
                 interfaceCard
                 gifCard
                 appearanceCard
@@ -22,6 +23,33 @@ struct SettingsTab: View {
             }
             .padding(18)
         }
+    }
+
+    private var presetsCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionHeader("settings.presets", "paintbrush.pointed.fill")
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), spacing: 8)], spacing: 8) {
+                ForEach(UIThemePreset.all) { preset in
+                    Button { prefs.applyPreset(preset) } label: {
+                        HStack(spacing: 8) {
+                            Circle().fill(Color(hex: preset.accent)).frame(width: 12, height: 12)
+                                .overlay(Circle().stroke(.white.opacity(0.4)))
+                            Text(preset.name).font(.caption.weight(.semibold)).lineLimit(1)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 10).frame(height: 34)
+                        .background(LinearGradient(colors: [Color(hex: preset.gradientTop), Color(hex: preset.gradientBottom)], startPoint: .leading, endPoint: .trailing))
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(hex: preset.accent).opacity(0.5)))
+                        .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .hoverScale(1.04)
+                }
+            }
+        }
+        .padding(14)
+        .glass()
     }
 
     private var interfaceCard: some View {
@@ -35,19 +63,48 @@ struct SettingsTab: View {
             .labelsHidden()
             .pickerStyle(.segmented)
 
-            colorRow(loc("settings.accent"), hex: bindingHex(\.accentHex))
-
             HStack {
-                Text(loc("settings.weather")).font(.callout.weight(.medium))
+                Text(loc("settings.scheme")).font(.callout.weight(.medium))
                 Spacer()
-                Picker("", selection: $prefs.weatherEffect) {
-                    ForEach(WeatherEffect.allCases) { Text(loc($0.labelKey)).tag($0) }
+                Picker("", selection: Binding(get: { prefs.scheme }, set: { prefs.scheme = $0 })) {
+                    ForEach(UIScheme.allCases) { Text(loc($0.labelKey)).tag($0) }
                 }
                 .labelsHidden().pickerStyle(.segmented).frame(width: 220)
+            }
+
+            colorRow(loc("settings.accent"), hex: bindingHex(\.accentHex))
+            Toggle(loc("settings.crt"), isOn: $prefs.crtMode)
+
+            Text(loc("settings.weather")).font(.callout.weight(.medium))
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 88), spacing: 8)], spacing: 8) {
+                ForEach(WeatherEffect.allCases) { effect in
+                    effectChip(effect)
+                }
             }
         }
         .padding(14)
         .glass()
+    }
+
+    private func effectChip(_ effect: WeatherEffect) -> some View {
+        let active = effect == .off ? prefs.activeEffects.isEmpty : prefs.activeEffects.contains(effect)
+        return Button {
+            prefs.toggleEffect(effect)
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: effect.icon).font(.system(size: 15))
+                Text(loc(effect.labelKey)).font(.caption2.weight(.medium)).lineLimit(1).minimumScaleFactor(0.7)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+            .background(active ? Color.accentColor.opacity(0.25) : Color.white.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 9).stroke(active ? Color.accentColor : Color.white.opacity(0.1)))
+            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(active ? Color.accentColor : Color.secondary)
+        .hoverScale(1.05)
     }
 
     private var gifCard: some View {

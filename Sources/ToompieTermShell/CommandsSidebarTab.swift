@@ -15,6 +15,15 @@ struct CommandsSidebarTab: View {
     @State private var filterTag: UUID?
     @State private var showingAddSheet = false
     @State private var editingCommand: CommandShortcut?
+    @State private var fillRequest: FillRequest?
+
+    struct FillRequest: Identifiable {
+        let id = UUID()
+        let command: String
+        let workingDirectory: String
+        let variables: [String]
+        let panelIndex: Int
+    }
 
     private var commands: [CommandShortcut] {
         allCommands.filter { command in
@@ -49,6 +58,11 @@ struct CommandsSidebarTab: View {
         }
         .sheet(isPresented: $showingAddSheet) { CommandShortcutEditor(command: nil).frame(width: 640) }
         .sheet(item: $editingCommand) { CommandShortcutEditor(command: $0).frame(width: 640) }
+        .sheet(item: $fillRequest) { request in
+            SnippetFillSheet(commandText: request.command, variables: request.variables) { finalCommand in
+                runResolved(finalCommand, workingDirectory: request.workingDirectory, in: request.panelIndex)
+            }
+        }
     }
 
     private func simpleRow(_ command: CommandShortcut) -> some View {
@@ -78,6 +92,14 @@ struct CommandsSidebarTab: View {
                     }
                 }
                 Spacer()
+                ScopeMoveMenu(
+                    currentProjectID: scope.currentProjectID,
+                    onCopy: { target in
+                        let dup = CommandShortcut(name: command.name, command: command.command, workingDirectory: command.workingDirectory, commandDescription: command.commandDescription, icon: command.icon, tagIDsRaw: command.tagIDsRaw, projectID: target)
+                        modelContext.insert(dup)
+                    },
+                    onMove: { command.projectID = $0; command.updatedAt = Date() }
+                )
                 RowButtons(onEdit: { editingCommand = command }, onDelete: { modelContext.delete(command) })
             }
             Text(command.command)
@@ -99,9 +121,18 @@ struct CommandsSidebarTab: View {
     }
 
     private func run(_ command: CommandShortcut, in panelIndex: Int) {
-        guard !prefs.confirmDangerous || CommandConfirmation.shouldRun(command.command) else { return }
-        let workingDirectory = command.workingDirectory.isEmpty ? nil : command.workingDirectory
-        terminalManager.runCommand(command.command, workingDirectory: workingDirectory, in: panelIndex)
+        let variables = Snippet.variables(in: command.command)
+        if variables.isEmpty {
+            runResolved(command.command, workingDirectory: command.workingDirectory, in: panelIndex)
+        } else {
+            fillRequest = FillRequest(command: command.command, workingDirectory: command.workingDirectory, variables: variables, panelIndex: panelIndex)
+        }
+    }
+
+    private func runResolved(_ command: String, workingDirectory: String, in panelIndex: Int) {
+        guard !prefs.confirmDangerous || CommandConfirmation.shouldRun(command) else { return }
+        let dir = workingDirectory.isEmpty ? nil : workingDirectory
+        terminalManager.runCommand(command, workingDirectory: dir, in: panelIndex)
     }
 }
 

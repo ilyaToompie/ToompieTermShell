@@ -61,6 +61,14 @@ struct PathsSidebarTab: View {
                                     Text(path.absolutePath).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                                 }
                                 Spacer()
+                                ScopeMoveMenu(
+                                    currentProjectID: scope.currentProjectID,
+                                    onCopy: { target in
+                                        let dup = PinnedPath(name: path.name, absolutePath: path.absolutePath, icon: path.icon, tagIDsRaw: path.tagIDsRaw, projectID: target)
+                                        modelContext.insert(dup)
+                                    },
+                                    onMove: { path.projectID = $0; path.updatedAt = Date() }
+                                )
                                 RowButtons(onEdit: { editingPath = path }, onDelete: { modelContext.delete(path) })
                             }
                             TagRowChips(ids: path.tagIDs, tags: tags)

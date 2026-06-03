@@ -43,15 +43,16 @@ struct PulsingDot: View {
 
 struct DecorBlobs: View {
     let accent: Color
+    var parallax: CGSize = .zero
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
             let t = context.date.timeIntervalSinceReferenceDate
             ZStack {
-                blob(accent, t: t, phase: 0, radius: 260)
-                blob(.blue, t: t, phase: 2.1, radius: 220)
-                blob(.purple, t: t, phase: 4.2, radius: 240)
-                blob(.teal, t: t, phase: 1.1, radius: 180)
+                blob(accent, t: t, phase: 0, radius: 260, depth: 1.0)
+                blob(.blue, t: t, phase: 2.1, radius: 220, depth: 1.6)
+                blob(.purple, t: t, phase: 4.2, radius: 240, depth: 0.7)
+                blob(.teal, t: t, phase: 1.1, radius: 180, depth: 2.0)
             }
             .blur(radius: 70)
             .opacity(0.30)
@@ -59,14 +60,64 @@ struct DecorBlobs: View {
         .allowsHitTesting(false)
     }
 
-    private func blob(_ color: Color, t: Double, phase: Double, radius: CGFloat) -> some View {
+    private func blob(_ color: Color, t: Double, phase: Double, radius: CGFloat, depth: CGFloat) -> some View {
         Circle()
             .fill(color)
             .frame(width: radius, height: radius)
             .offset(
-                x: CGFloat(cos(t * 0.18 + phase)) * 150,
-                y: CGFloat(sin(t * 0.23 + phase)) * 130
+                x: CGFloat(cos(t * 0.18 + phase)) * 150 + parallax.width * depth,
+                y: CGFloat(sin(t * 0.23 + phase)) * 130 + parallax.height * depth
             )
+    }
+}
+
+struct CRTOverlay: View {
+    var body: some View {
+        ZStack {
+            Canvas { ctx, size in
+                var y: CGFloat = 0
+                while y < size.height {
+                    ctx.fill(Path(CGRect(x: 0, y: y, width: size.width, height: 1.0)), with: .color(.black.opacity(0.18)))
+                    y += 3
+                }
+            }
+            .blendMode(.multiply)
+            RadialGradient(colors: [.clear, .black.opacity(0.05), .black.opacity(0.45)], center: .center, startRadius: 60, endRadius: 700)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+struct AnimatedBorder: ViewModifier {
+    let active: Bool
+    let cornerRadius: CGFloat
+    let color: Color
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            if active {
+                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { ctx in
+                    let angle = Angle.degrees((ctx.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3) / 3) * 360)
+                    shape.strokeBorder(
+                        AngularGradient(
+                            gradient: Gradient(colors: [color, color.opacity(0.2), color.opacity(0.7), color.opacity(0.2), color]),
+                            center: .center,
+                            angle: angle
+                        ),
+                        lineWidth: 2
+                    )
+                }
+            } else {
+                shape.strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
+            }
+        }
+    }
+}
+
+extension View {
+    func animatedBorder(active: Bool, cornerRadius: CGFloat = 12, color: Color = .accentColor) -> some View {
+        modifier(AnimatedBorder(active: active, cornerRadius: cornerRadius, color: color))
     }
 }
 

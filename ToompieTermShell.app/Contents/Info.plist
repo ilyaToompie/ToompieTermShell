@@ -23,5 +23,15 @@
   <string>14.0</string>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <key>NSDocumentsFolderUsageDescription</key>
+  <string>ToompieTermShell needs access to your Documents to open and edit files and configs.</string>
+  <key>NSDesktopFolderUsageDescription</key>
+  <string>ToompieTermShell needs access to your Desktop to open and edit files.</string>
+  <key>NSDownloadsFolderUsageDescription</key>
+  <string>ToompieTermShell needs access to your Downloads to open and edit files.</string>
+  <key>NSRemovableVolumesUsageDescription</key>
+  <string>ToompieTermShell needs access to removable volumes to open and edit files.</string>
+  <key>NSNetworkVolumesUsageDescription</key>
+  <string>ToompieTermShell needs access to network volumes to open and edit files.</string>
 </dict>
 </plist>

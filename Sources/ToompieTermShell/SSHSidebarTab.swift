@@ -14,7 +14,6 @@ struct SSHSidebarTab: View {
     @State private var showingAddSheet = false
     @State private var editingShortcut: SSHShortcut?
     @State private var ftpTarget: SSHShortcut?
-    @State private var ftpPath = ""
 
     private var shortcuts: [SSHShortcut] {
         allShortcuts.filter { item in
@@ -50,6 +49,11 @@ struct SSHSidebarTab: View {
                                         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                                 }
                                 Spacer()
+                                ScopeMoveMenu(
+                                    currentProjectID: scope.currentProjectID,
+                                    onCopy: { copy(shortcut, to: $0) },
+                                    onMove: { shortcut.projectID = $0; shortcut.updatedAt = Date() }
+                                )
                                 RowButtons(onEdit: { editingShortcut = shortcut }, onDelete: {
                                     KeychainStore.deletePassword(for: shortcut.id)
                                     modelContext.delete(shortcut)
@@ -58,8 +62,10 @@ struct SSHSidebarTab: View {
                             TagRowChips(ids: shortcut.tagIDs, tags: tags)
                             HStack {
                                 TerminalTargetMenu(title: loc("common.connect"), systemImage: "bolt.horizontal") { connect(shortcut, in: $0) }
-                                Button { ftpTarget = shortcut; ftpPath = "" } label: { Label(loc("ssh.files"), systemImage: "folder") }
+                                Button { ftpTarget = shortcut } label: { Label(loc("ssh.files"), systemImage: "folder.fill") }
                                     .buttonStyle(.bordered).controlSize(.small)
+                                    .onHover { hovering in if hovering { RemoteFileService.prewarm(shortcut: shortcut) } }
+                                adminMenu(shortcut)
                             }
                         }
                     }
@@ -69,12 +75,46 @@ struct SSHSidebarTab: View {
         .sheet(isPresented: $showingAddSheet) { SSHShortcutEditor(shortcut: nil).frame(width: 620) }
         .sheet(item: $editingShortcut) { SSHShortcutEditor(shortcut: $0).frame(width: 620) }
         .sheet(item: $ftpTarget) { target in
-            RemoteFilePrompt(path: $ftpPath) {
-                terminalManager.openRemoteFileEditor(shortcut: target, remotePath: ftpPath)
-                ftpTarget = nil
-            } onCancel: { ftpTarget = nil }
-            .frame(width: 480)
+            SFTPBrowserView(shortcut: target)
         }
+    }
+
+    private func copy(_ s: SSHShortcut, to project: UUID?) {
+        let dup = SSHShortcut(name: s.name, host: s.host, port: s.port, username: s.username, authType: s.authType, privateKeyPath: s.privateKeyPath, rememberPassword: false, startupDirectory: s.startupDirectory, startupCommand: s.startupCommand, icon: s.icon, tagIDsRaw: s.tagIDsRaw, projectID: project)
+        modelContext.insert(dup)
+    }
+
+    private func adminMenu(_ shortcut: SSHShortcut) -> some View {
+        Menu {
+            ForEach(AdminCommands.groups, id: \.0) { group in
+                Section(group.0) {
+                    ForEach(group.1) { item in
+                        Button {
+                            terminalManager.runCommand(item.command, workingDirectory: nil, in: terminalManager.focusedPanelIndex)
+                        } label: { Label(item.title, systemImage: item.icon) }
+                    }
+                }
+            }
+            Divider()
+            Button { installKey(shortcut) } label: { Label(loc("ssh.installKey"), systemImage: "key.fill") }
+        } label: {
+            Image(systemName: "wrench.and.screwdriver")
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .controlSize(.small)
+        .help(loc("ssh.admin"))
+    }
+
+    private func installKey(_ shortcut: SSHShortcut) {
+        var parts = ["ssh-copy-id", "-p", "\(max(shortcut.port, 1))"]
+        if shortcut.authType == .key, !shortcut.privateKeyPath.isEmpty {
+            parts.append("-i")
+            parts.append(ShellSafety.singleQuoted(shortcut.privateKeyPath))
+        }
+        parts.append(ShellSafety.singleQuoted("\(shortcut.username)@\(shortcut.host)"))
+        terminalManager.runCommand(parts.joined(separator: " "), workingDirectory: nil, in: terminalManager.focusedPanelIndex)
     }
 
     private func connect(_ shortcut: SSHShortcut, in panelIndex: Int) {
@@ -84,26 +124,6 @@ struct SSHSidebarTab: View {
             command += "\n"
         }
         terminalManager.runCommand(command, workingDirectory: nil, in: panelIndex)
-    }
-}
-
-struct RemoteFilePrompt: View {
-    @EnvironmentObject private var loc: LocalizationManager
-    @Binding var path: String
-    let onOpen: () -> Void
-    let onCancel: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(loc("ftp.openRemote")).font(.title3.weight(.semibold))
-            EditorRow(loc("ftp.path")) { EditorTextField(title: "/etc/nginx/nginx.conf", text: $path) }
-            HStack {
-                Spacer()
-                Button(loc("common.cancel"), action: onCancel)
-                Button(loc("common.open"), action: onOpen).keyboardShortcut(.defaultAction).disabled(path.isEmpty)
-            }
-        }
-        .padding(22)
     }
 }
 

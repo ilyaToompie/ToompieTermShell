@@ -54,7 +54,7 @@ struct ToompieTermShellApp: App {
                 .environmentObject(gifLibrary)
                 .environmentObject(scope)
                 .modelContainer(modelContainer)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(preferences.scheme.colorScheme)
                 .frame(minWidth: 1000, minHeight: 660)
         }
         .commands {
@@ -73,6 +73,13 @@ struct ToompieTermShellApp: App {
                 }
             }
             CommandMenu("Terminal") {
+                Button("Command Palette") {
+                    PaletteController.shared.open = true
+                }
+                .keyboardShortcut("k", modifiers: [.command])
+
+                Divider()
+
                 Button(localization("common.newTab")) {
                     terminalManager.createTab(in: terminalManager.focusedPanelIndex)
                 }
@@ -106,7 +113,7 @@ struct ToompieTermShellApp: App {
                 .environmentObject(fontLibrary)
                 .environmentObject(gifLibrary)
                 .frame(width: 560, height: 680)
-                .preferredColorScheme(.dark)
+                .preferredColorScheme(preferences.scheme.colorScheme)
         }
     }
 }

@@ -46,8 +46,10 @@ final class TerminalTabModel: ObservableObject, Identifiable {
         hasCustomTitle = true
     }
 
+    @MainActor
     func saveEditor() {
         onSave?(editorText)
+        ToastCenter.shared.key("toast.saved", icon: "square.and.arrow.down.fill")
     }
 }
 
@@ -91,6 +93,15 @@ final class TerminalWorkspaceManager: ObservableObject {
                 self?.applyAppearanceToAll()
             }
             .store(in: &cancellables)
+
+        NotificationCenter.default.addObserver(forName: .ttshellSessionsChanged, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.updateDockBadge() }
+        }
+    }
+
+    func updateDockBadge() {
+        let count = panels.reduce(0) { $0 + $1.tabs.filter { $0.kind == .shell && $0.isRunning }.count }
+        NSApplication.shared.dockTile.badgeLabel = count > 0 ? "\(count)" : nil
     }
 
     func setVisiblePanelCount(_ count: Int) {
@@ -117,6 +128,7 @@ final class TerminalWorkspaceManager: ObservableObject {
         panel.tabs.append(tab)
         panel.selectedTabID = tab.id
         focusPanel(panelIndex)
+        updateDockBadge()
 
         let shell = Self.defaultShell()
         let shellName = "-" + URL(fileURLWithPath: shell).lastPathComponent
@@ -137,6 +149,7 @@ final class TerminalWorkspaceManager: ObservableObject {
         }
         panel.tabs.removeAll { $0.id == selected.id }
         panel.selectedTabID = panel.tabs.last?.id
+        updateDockBadge()
     }
 
     @discardableResult
@@ -375,6 +388,11 @@ final class TerminalProcessDelegate: NSObject, LocalProcessTerminalViewDelegate 
     func processTerminated(source: TerminalView, exitCode: Int32?) {
         DispatchQueue.main.async { [weak self] in
             self?.owner?.isRunning = false
+            NotificationCenter.default.post(name: .ttshellSessionsChanged, object: nil)
         }
     }
+}
+
+extension Notification.Name {
+    static let ttshellSessionsChanged = Notification.Name("ttshellSessionsChanged")
 }

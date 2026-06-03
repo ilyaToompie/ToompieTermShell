@@ -204,9 +204,11 @@ struct TargetSegments: View {
 }
 
 enum Clipboard {
+    @MainActor
     static func copy(_ value: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(value, forType: .string)
+        ToastCenter.shared.key("toast.copied", icon: "doc.on.doc.fill")
     }
 }
 
@@ -228,6 +230,7 @@ enum CommandConfirmation {
 
 struct SidebarCard<Content: View>: View {
     let content: Content
+    @State private var appeared = false
 
     init(@ViewBuilder content: () -> Content) {
         self.content = content()
@@ -244,6 +247,9 @@ struct SidebarCard<Content: View>: View {
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.white.opacity(0.12)))
         .hoverScale(1.01, lift: true)
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 10)
+        .onAppear { withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { appeared = true } }
     }
 }
 

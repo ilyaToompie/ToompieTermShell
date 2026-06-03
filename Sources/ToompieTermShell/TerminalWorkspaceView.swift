@@ -89,6 +89,7 @@ struct TerminalPanelView: View {
     @ObservedObject var panel: TerminalPanelModel
     @EnvironmentObject private var terminalManager: TerminalWorkspaceManager
     @EnvironmentObject private var loc: LocalizationManager
+    @EnvironmentObject private var prefs: AppPreferences
     @State private var editingTabID: UUID?
     @State private var editingText = ""
 
@@ -112,18 +113,15 @@ struct TerminalPanelView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .overlay {
+                if prefs.crtMode {
+                    CRTOverlay()
+                }
+            }
         }
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(
-                    isFocused
-                        ? AnyShapeStyle(LinearGradient(colors: [Color.accentColor, Color.accentColor.opacity(0.4)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                        : AnyShapeStyle(Color.white.opacity(0.14)),
-                    lineWidth: isFocused ? 2 : 1
-                )
-        )
-        .shadow(color: isFocused ? Color.accentColor.opacity(0.32) : .clear, radius: 12, y: 2)
+        .animatedBorder(active: isFocused, cornerRadius: 12, color: prefs.accentColor)
+        .shadow(color: isFocused ? prefs.accentColor.opacity(0.32) : .clear, radius: 12, y: 2)
         .contentShape(Rectangle())
         .onTapGesture {
             terminalManager.focusPanel(panel.index)

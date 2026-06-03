@@ -46,18 +46,88 @@ enum AppBackgroundMode: String, CaseIterable, Identifiable {
     }
 }
 
+enum UIScheme: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+    var labelKey: String { "scheme.\(rawValue)" }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil
+        case .light: return .light
+        case .dark: return .dark
+        }
+    }
+}
+
+struct UIThemePreset: Identifiable {
+    let id: String
+    let name: String
+    let accent: String
+    let foreground: String
+    let background: String
+    let gradientTop: String
+    let gradientBottom: String
+    let effects: [WeatherEffect]
+    var mode: AppBackgroundMode = .gradient
+
+    static let all: [UIThemePreset] = [
+        UIThemePreset(id: "system", name: "System", accent: "#5E9EFF", foreground: "#E1E6EC", background: "#12141B", gradientTop: "#161B2E", gradientBottom: "#080A12", effects: [], mode: .native),
+        UIThemePreset(id: "midnight", name: "Midnight", accent: "#5E9EFF", foreground: "#E1E6EC", background: "#0B0E14", gradientTop: "#10131C", gradientBottom: "#06070B", effects: []),
+        UIThemePreset(id: "carbon", name: "Carbon", accent: "#9AA4B2", foreground: "#D8DEE9", background: "#0B0C10", gradientTop: "#15171C", gradientBottom: "#08090C", effects: []),
+        UIThemePreset(id: "obsidian", name: "Obsidian", accent: "#7C5CFF", foreground: "#E6E1FF", background: "#0A0A12", gradientTop: "#14122A", gradientBottom: "#070710", effects: []),
+        UIThemePreset(id: "tokyonight", name: "Tokyo Night", accent: "#7AA2F7", foreground: "#C0CAF5", background: "#16161E", gradientTop: "#1F2335", gradientBottom: "#101019", effects: []),
+        UIThemePreset(id: "crimson", name: "Crimson", accent: "#FF4D5E", foreground: "#F6DADD", background: "#120708", gradientTop: "#241013", gradientBottom: "#0B0405", effects: [.embers]),
+        UIThemePreset(id: "forest", name: "Forest", accent: "#4ADE80", foreground: "#D6F5E0", background: "#08130D", gradientTop: "#0F2418", gradientBottom: "#050B08", effects: []),
+        UIThemePreset(id: "mono", name: "Mono", accent: "#B6B6BE", foreground: "#E4E4E8", background: "#0E0E10", gradientTop: "#18181C", gradientBottom: "#0A0A0C", effects: []),
+        UIThemePreset(id: "matrix", name: "Matrix", accent: "#39FF14", foreground: "#39FF14", background: "#020902", gradientTop: "#04130A", gradientBottom: "#000300", effects: [.matrix]),
+        UIThemePreset(id: "synthwave", name: "Synthwave", accent: "#FF2E97", foreground: "#F8E6FF", background: "#160A24", gradientTop: "#26104A", gradientBottom: "#0C0518", effects: [.bokeh]),
+        UIThemePreset(id: "nord", name: "Nord", accent: "#88C0D0", foreground: "#D8DEE9", background: "#222730", gradientTop: "#2E3440", gradientBottom: "#1B1F26", effects: []),
+        UIThemePreset(id: "ocean", name: "Ocean", accent: "#4FC3F7", foreground: "#CDE7FF", background: "#06121F", gradientTop: "#0A2438", gradientBottom: "#040C16", effects: [.bubbles]),
+        UIThemePreset(id: "ember", name: "Ember", accent: "#FF7A18", foreground: "#FFE8D6", background: "#150B06", gradientTop: "#2A160C", gradientBottom: "#0A0503", effects: [.embers]),
+        UIThemePreset(id: "sakura", name: "Sakura", accent: "#FF7EB6", foreground: "#FFF0F5", background: "#1E141A", gradientTop: "#321F2B", gradientBottom: "#130C11", effects: [.petals])
+    ]
+}
+
 enum WeatherEffect: String, CaseIterable, Identifiable {
     case off
     case snow
     case rain
+    case stars
+    case sparkles
+    case confetti
+    case bubbles
+    case fireflies
+    case leaves
+    case embers
+    case hearts
+    case matrix
+    case petals
+    case bokeh
 
     var id: String { rawValue }
 
-    var labelKey: String {
+    var labelKey: String { "weather.\(rawValue)" }
+
+    var icon: String {
         switch self {
-        case .off: return "weather.off"
-        case .snow: return "weather.snow"
-        case .rain: return "weather.rain"
+        case .off: return "nosign"
+        case .snow: return "snowflake"
+        case .rain: return "cloud.rain"
+        case .stars: return "star"
+        case .sparkles: return "sparkles"
+        case .confetti: return "party.popper"
+        case .bubbles: return "bubbles.and.sparkles"
+        case .fireflies: return "lightbulb.min"
+        case .leaves: return "leaf"
+        case .embers: return "flame"
+        case .hearts: return "heart"
+        case .matrix: return "chevron.left.forwardslash.chevron.right"
+        case .petals: return "camera.macro"
+        case .bokeh: return "circle.hexagongrid"
         }
     }
 }
@@ -137,7 +207,9 @@ final class AppPreferences: ObservableObject {
     @Published var gifEditable: Bool { didSet { store(gifEditable, "gifEditable") } }
     @Published var gifRotation: Double { didSet { store(gifRotation, "gifRotation") } }
     @Published var gifFlip: Bool { didSet { store(gifFlip, "gifFlip") } }
-    @Published var weatherEffect: WeatherEffect { didSet { store(weatherEffect.rawValue, "weatherEffect") } }
+    @Published var crtMode: Bool { didSet { store(crtMode, "crtMode") } }
+    @Published var schemeRaw: String { didSet { store(schemeRaw, "uiScheme") } }
+    @Published var effectsRaw: String { didSet { store(effectsRaw, "activeEffects") } }
     @Published var bgInvert: Bool { didSet { store(bgInvert, "bgInvert") } }
     @Published var bgGrayscale: Bool { didSet { store(bgGrayscale, "bgGrayscale") } }
     @Published var bgBlur: Double { didSet { store(bgBlur, "bgBlur") } }
@@ -189,12 +261,54 @@ final class AppPreferences: ObservableObject {
         gifEditable = d.bool(forKey: "gifEditable")
         gifRotation = d.double(forKey: "gifRotation")
         gifFlip = d.bool(forKey: "gifFlip")
-        weatherEffect = WeatherEffect(rawValue: d.string(forKey: "weatherEffect") ?? "") ?? .off
+        if let stored = d.string(forKey: "activeEffects") {
+            effectsRaw = stored
+        } else if let legacy = d.string(forKey: "weatherEffect"), legacy != "off", !legacy.isEmpty {
+            effectsRaw = legacy
+        } else {
+            effectsRaw = ""
+        }
         bgInvert = d.bool(forKey: "bgInvert")
         bgGrayscale = d.bool(forKey: "bgGrayscale")
         bgBlur = d.double(forKey: "bgBlur")
         bgBrightness = d.double(forKey: "bgBrightness")
         bgDim = d.object(forKey: "bgDim") == nil ? 0.35 : d.double(forKey: "bgDim")
+        crtMode = d.bool(forKey: "crtMode")
+        schemeRaw = d.string(forKey: "uiScheme") ?? "dark"
+    }
+
+    var scheme: UIScheme {
+        get { UIScheme(rawValue: schemeRaw) ?? .dark }
+        set { schemeRaw = newValue.rawValue }
+    }
+
+    func applyPreset(_ preset: UIThemePreset) {
+        accentHex = preset.accent
+        foregroundHex = preset.foreground
+        backgroundHex = preset.background
+        gradientTopHex = preset.gradientTop
+        gradientBottomHex = preset.gradientBottom
+        backgroundMode = preset.mode
+        activeEffects = Set(preset.effects)
+    }
+
+    var activeEffects: Set<WeatherEffect> {
+        get {
+            Set(effectsRaw.split(separator: ",").compactMap { WeatherEffect(rawValue: String($0)) }).subtracting([.off])
+        }
+        set {
+            effectsRaw = newValue.subtracting([.off]).map { $0.rawValue }.sorted().joined(separator: ",")
+        }
+    }
+
+    func toggleEffect(_ effect: WeatherEffect) {
+        if effect == .off {
+            activeEffects = []
+            return
+        }
+        var set = activeEffects
+        if set.contains(effect) { set.remove(effect) } else { set.insert(effect) }
+        activeEffects = set
     }
 
     func applyTheme(_ theme: TerminalTheme) {

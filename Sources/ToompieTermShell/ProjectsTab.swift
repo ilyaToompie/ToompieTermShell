@@ -188,6 +188,14 @@ struct NotesSection: View {
                                 }
                             }
                             Spacer()
+                            ScopeMoveMenu(
+                                currentProjectID: scope.currentProjectID,
+                                onCopy: { target in
+                                    let dup = ProjectNote(title: note.title, body: note.body, tagIDsRaw: note.tagIDsRaw, projectID: target)
+                                    modelContext.insert(dup)
+                                },
+                                onMove: { note.projectID = $0; note.updatedAt = Date() }
+                            )
                             Button(role: .destructive) { modelContext.delete(note) } label: { Image(systemName: "trash") }
                                 .buttonStyle(.plain).foregroundStyle(.red)
                         }

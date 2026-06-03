@@ -35,6 +35,7 @@ extension View {
 
 struct AppBackground: View {
     @ObservedObject var prefs: AppPreferences
+    var parallax: CGSize = .zero
 
     var body: some View {
         ZStack {
@@ -71,7 +72,7 @@ struct AppBackground: View {
         }
         .overlay {
             if prefs.backgroundMode != .image {
-                DecorBlobs(accent: prefs.accentColor).ignoresSafeArea()
+                DecorBlobs(accent: prefs.accentColor, parallax: parallax).ignoresSafeArea()
             }
         }
         .ignoresSafeArea()

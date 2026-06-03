@@ -4,6 +4,8 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject private var terminalManager: TerminalWorkspaceManager
     @EnvironmentObject private var prefs: AppPreferences
+    @StateObject private var palette = PaletteController.shared
+    @State private var parallax: CGSize = .zero
     @AppStorage("lastSelectedSidebarTab") private var selectedSidebarTabRawValue = SidebarTab.ssh.rawValue
     @AppStorage("sidebarWidth") private var sidebarWidth = 320.0
 
@@ -27,20 +29,33 @@ struct ContentView: View {
                 .environmentObject(terminalManager)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .background(AppBackground(prefs: prefs))
+        .background(
+            AppBackground(prefs: prefs, parallax: parallax)
+                .onContinuousHover { phase in
+                    if case .active(let loc) = phase {
+                        withAnimation(.easeOut(duration: 0.4)) {
+                            parallax = CGSize(width: (loc.x - 500) * 0.03, height: (loc.y - 380) * 0.03)
+                        }
+                    }
+                }
+        )
         .overlay(alignment: .top) {
-            if prefs.weatherEffect != .off {
-                WeatherOverlay(effect: prefs.weatherEffect)
+            if !prefs.activeEffects.isEmpty {
+                WeatherOverlay(effects: prefs.activeEffects.map(\.rawValue).sorted().compactMap(WeatherEffect.init))
                     .allowsHitTesting(false)
                     .ignoresSafeArea()
             }
         }
+        .overlay(ToastOverlay())
         .overlay(alignment: .bottomLeading) {
             GifWidget(prefs: prefs)
                 .padding(16)
                 .allowsHitTesting(prefs.gifEditable)
         }
         .navigationTitle(windowTitle)
+        .sheet(isPresented: $palette.open) {
+            CommandPalette()
+        }
         .tint(prefs.accentColor)
         .dynamicTypeSize(prefs.textCase == .large ? .xxLarge : .large)
     }
