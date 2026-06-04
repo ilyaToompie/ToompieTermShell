@@ -9,6 +9,7 @@ struct ToompieTermShellApp: App {
     @StateObject private var localization = LocalizationManager.shared
     @StateObject private var fontLibrary = FontLibrary.shared
     @StateObject private var gifLibrary = GifLibrary.shared
+    @StateObject private var gifInstances = GifInstanceStore.shared
     @StateObject private var scope = ScopeManager.shared
     private let modelContainer: ModelContainer
 
@@ -52,6 +53,7 @@ struct ToompieTermShellApp: App {
                 .environmentObject(localization)
                 .environmentObject(fontLibrary)
                 .environmentObject(gifLibrary)
+                .environmentObject(gifInstances)
                 .environmentObject(scope)
                 .modelContainer(modelContainer)
                 .preferredColorScheme(preferences.scheme.colorScheme)
@@ -112,6 +114,7 @@ struct ToompieTermShellApp: App {
                 .environmentObject(localization)
                 .environmentObject(fontLibrary)
                 .environmentObject(gifLibrary)
+                .environmentObject(gifInstances)
                 .frame(width: 560, height: 680)
                 .preferredColorScheme(preferences.scheme.colorScheme)
         }

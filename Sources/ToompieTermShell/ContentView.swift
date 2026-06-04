@@ -5,6 +5,7 @@ struct ContentView: View {
     @EnvironmentObject private var terminalManager: TerminalWorkspaceManager
     @EnvironmentObject private var prefs: AppPreferences
     @StateObject private var palette = PaletteController.shared
+    @StateObject private var gifStore = GifInstanceStore.shared
     @State private var parallax: CGSize = .zero
     @AppStorage("lastSelectedSidebarTab") private var selectedSidebarTabRawValue = SidebarTab.ssh.rawValue
     @AppStorage("sidebarWidth") private var sidebarWidth = 320.0
@@ -47,10 +48,14 @@ struct ContentView: View {
             }
         }
         .overlay(ToastOverlay())
-        .overlay(alignment: .bottomLeading) {
-            GifWidget(prefs: prefs)
-                .padding(16)
-                .allowsHitTesting(prefs.gifEditable)
+        .overlay {
+            ZStack {
+                ForEach($gifStore.instances) { $inst in
+                    GifWidget(instance: $inst, editable: prefs.gifEditable)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .allowsHitTesting(prefs.gifEditable)
         }
         .navigationTitle(windowTitle)
         .sheet(isPresented: $palette.open) {

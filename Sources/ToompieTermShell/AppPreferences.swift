@@ -107,6 +107,11 @@ enum WeatherEffect: String, CaseIterable, Identifiable {
     case matrix
     case petals
     case bokeh
+    case dust
+    case fog
+    case meteors
+    case lanterns
+    case glitter
 
     var id: String { rawValue }
 
@@ -128,6 +133,11 @@ enum WeatherEffect: String, CaseIterable, Identifiable {
         case .matrix: return "chevron.left.forwardslash.chevron.right"
         case .petals: return "camera.macro"
         case .bokeh: return "circle.hexagongrid"
+        case .dust: return "wind"
+        case .fog: return "cloud.fog.fill"
+        case .meteors: return "moon.stars.fill"
+        case .lanterns: return "lightbulb.fill"
+        case .glitter: return "sparkle"
         }
     }
 }
@@ -209,6 +219,9 @@ final class AppPreferences: ObservableObject {
     @Published var gifFlip: Bool { didSet { store(gifFlip, "gifFlip") } }
     @Published var crtMode: Bool { didSet { store(crtMode, "crtMode") } }
     @Published var schemeRaw: String { didSet { store(schemeRaw, "uiScheme") } }
+    @Published var shellPath: String { didSet { store(shellPath, "shellPath") } }
+    @Published var shellStartupCommand: String { didSet { store(shellStartupCommand, "shellStartupCommand") } }
+    @Published var loginShell: Bool { didSet { store(loginShell, "loginShell") } }
     @Published var effectsRaw: String { didSet { store(effectsRaw, "activeEffects") } }
     @Published var bgInvert: Bool { didSet { store(bgInvert, "bgInvert") } }
     @Published var bgGrayscale: Bool { didSet { store(bgGrayscale, "bgGrayscale") } }
@@ -275,6 +288,19 @@ final class AppPreferences: ObservableObject {
         bgDim = d.object(forKey: "bgDim") == nil ? 0.35 : d.double(forKey: "bgDim")
         crtMode = d.bool(forKey: "crtMode")
         schemeRaw = d.string(forKey: "uiScheme") ?? "dark"
+        shellPath = d.string(forKey: "shellPath") ?? ""
+        shellStartupCommand = d.string(forKey: "shellStartupCommand") ?? ""
+        loginShell = d.object(forKey: "loginShell") == nil ? true : d.bool(forKey: "loginShell")
+    }
+
+    func resolvedShell() -> String {
+        if !shellPath.isEmpty, FileManager.default.isExecutableFile(atPath: shellPath) {
+            return shellPath
+        }
+        if let env = ProcessInfo.processInfo.environment["SHELL"], FileManager.default.isExecutableFile(atPath: env) {
+            return env
+        }
+        return "/bin/zsh"
     }
 
     var scheme: UIScheme {

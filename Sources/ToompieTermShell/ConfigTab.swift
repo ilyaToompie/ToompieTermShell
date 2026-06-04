@@ -29,11 +29,67 @@ struct ConfigTab: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
+                shellCard
                 defaultsCard
                 rcCard
                 filesCard
             }
         }
+    }
+
+    private let commonShells = ["/bin/zsh", "/bin/bash", "/bin/sh", "/opt/homebrew/bin/fish", "/usr/local/bin/fish"]
+
+    private var shellCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Label(loc("config.shell"), systemImage: "apple.terminal").font(.headline)
+
+            HStack(spacing: 8) {
+                Text(loc("config.shellPath")).font(.callout.weight(.medium)).frame(width: 130, alignment: .leading)
+                TextField(loc("config.shellAuto"), text: $prefs.shellPath).textFieldStyle(.roundedBorder).font(.callout.monospaced())
+                Button { chooseShell() } label: { Image(systemName: "folder") }
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    shellChip(loc("config.shellAuto"), value: "")
+                    ForEach(commonShells.filter { FileManager.default.isExecutableFile(atPath: $0) }, id: \.self) { path in
+                        shellChip((path as NSString).lastPathComponent, value: path)
+                    }
+                }
+            }
+
+            Toggle(loc("config.loginShell"), isOn: $prefs.loginShell)
+
+            Text(loc("config.shellStartup")).font(.callout.weight(.medium))
+            TextField("source ~/.myrc", text: $prefs.shellStartupCommand, axis: .vertical)
+                .font(.system(.callout, design: .monospaced))
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(2...5)
+            Text(loc("config.shellStartupHint")).font(.caption2).foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .glass()
+    }
+
+    private func shellChip(_ title: String, value: String) -> some View {
+        let active = prefs.shellPath == value
+        return Button { prefs.shellPath = value } label: {
+            Text(title).font(.caption.weight(.medium))
+                .padding(.horizontal, 10).frame(height: 26)
+                .background(active ? Color.accentColor.opacity(0.25) : Color.white.opacity(0.06))
+                .clipShape(Capsule())
+                .overlay(Capsule().stroke(active ? Color.accentColor : Color.white.opacity(0.12)))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func chooseShell() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.showsHiddenFiles = true
+        panel.directoryURL = URL(fileURLWithPath: "/bin")
+        if panel.runModal() == .OK, let url = panel.url { prefs.shellPath = url.path }
     }
 
     private var defaultsCard: some View {

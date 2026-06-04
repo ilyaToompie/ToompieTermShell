@@ -130,12 +130,20 @@ final class TerminalWorkspaceManager: ObservableObject {
         focusPanel(panelIndex)
         updateDockBadge()
 
-        let shell = Self.defaultShell()
-        let shellName = "-" + URL(fileURLWithPath: shell).lastPathComponent
+        let shell = prefs.resolvedShell()
+        let base = URL(fileURLWithPath: shell).lastPathComponent
+        let shellName = prefs.loginShell ? "-" + base : base
         tab.terminalView.startProcess(executable: shell, execName: shellName, currentDirectory: FileManager.default.homeDirectoryForCurrentUser.path)
 
-        if let commandToRun {
+        let startup = prefs.shellStartupCommand.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !startup.isEmpty {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
+                self?.send(startup + "\n", to: panelIndex)
+            }
+        }
+
+        if let commandToRun {
+            DispatchQueue.main.asyncAfter(deadline: .now() + (startup.isEmpty ? 0.35 : 0.5)) { [weak self] in
                 self?.send(commandToRun, to: panelIndex)
             }
         }

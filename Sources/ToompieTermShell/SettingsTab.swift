@@ -7,6 +7,7 @@ struct SettingsTab: View {
     @EnvironmentObject private var loc: LocalizationManager
     @EnvironmentObject private var fonts: FontLibrary
     @EnvironmentObject private var gifs: GifLibrary
+    @EnvironmentObject private var gifInstances: GifInstanceStore
     @State private var gifURLField = ""
 
     var body: some View {
@@ -139,54 +140,81 @@ struct SettingsTab: View {
 
             Divider().opacity(0.2)
 
-            slider(loc("gif.size"), value: $prefs.gifSize, range: 48...360, suffix: "")
-            slider(loc("gif.opacity"), value: $prefs.gifOpacity, range: 0.1...1.0, percent: true)
-            slider(loc("gif.innerScale"), value: $prefs.gifInnerScale, range: 0.3...3.0, percent: true)
-            slider(loc("gif.radius"), value: $prefs.gifCornerRadius, range: 0...60, suffix: "")
             HStack {
-                Text(loc("gif.rotation")).font(.callout.weight(.medium))
-                Slider(value: $prefs.gifRotation, in: -180...180)
-                Text("\(Int(prefs.gifRotation))°").font(.callout.monospacedDigit()).frame(width: 44, alignment: .trailing)
+                Text(loc("gif.placed")).font(.callout.weight(.semibold))
+                Spacer()
+                Text("\(gifInstances.instances.count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+                if !gifInstances.instances.isEmpty {
+                    Button(role: .destructive) { gifInstances.removeAll() } label: {
+                        Label(loc("gif.removeAll"), systemImage: "trash")
+                    }
+                    .controlSize(.small)
+                }
             }
-
-            Toggle(loc("gif.fit"), isOn: $prefs.gifFit)
-            Toggle(loc("gif.flip"), isOn: $prefs.gifFlip)
-            Toggle(loc("gif.box"), isOn: $prefs.gifShowBox)
-            if prefs.gifShowBox {
-                slider(loc("gif.boxOpacity"), value: $prefs.gifBoxOpacity, range: 0...1.0, percent: true)
-                Toggle(loc("gif.border"), isOn: $prefs.gifBorder)
-            }
-
-            Divider().opacity(0.2)
             Toggle(loc("gif.editable"), isOn: $prefs.gifEditable)
             if prefs.gifEditable {
                 Text(loc("gif.editHint")).font(.caption2).foregroundStyle(.secondary)
             }
-            Button {
-                prefs.gifOffsetX = 0
-                prefs.gifOffsetY = 0
-            } label: {
-                Label(loc("gif.resetPos"), systemImage: "arrow.counterclockwise")
+            if gifInstances.instances.isEmpty {
+                Text(loc("gif.placedNone")).font(.caption2).foregroundStyle(.secondary)
+            }
+            ForEach($gifInstances.instances) { $inst in
+                instanceRow($inst)
             }
         }
         .padding(14)
         .glass()
     }
 
+    private func instanceRow(_ inst: Binding<GifInstance>) -> some View {
+        DisclosureGroup {
+            VStack(spacing: 6) {
+                slider(loc("gif.size"), value: inst.size, range: 48...400, suffix: "")
+                slider(loc("gif.opacity"), value: inst.opacity, range: 0.1...1.0, percent: true)
+                slider(loc("gif.innerScale"), value: inst.innerScale, range: 0.3...3.0, percent: true)
+                HStack {
+                    Text(loc("gif.rotation")).font(.callout.weight(.medium))
+                    Slider(value: inst.rotation, in: -180...180)
+                    Text("\(Int(inst.rotation.wrappedValue))°").font(.callout.monospacedDigit()).frame(width: 44, alignment: .trailing)
+                }
+                Toggle(loc("gif.fit"), isOn: inst.fit)
+                Toggle(loc("gif.flip"), isOn: inst.flip)
+                Toggle(loc("gif.box"), isOn: inst.showBox)
+                if inst.showBox.wrappedValue {
+                    slider(loc("gif.radius"), value: inst.cornerRadius, range: 0...60, suffix: "")
+                    slider(loc("gif.boxOpacity"), value: inst.boxOpacity, range: 0...1.0, percent: true)
+                    Toggle(loc("gif.border"), isOn: inst.border)
+                }
+                HStack {
+                    Button { inst.x.wrappedValue = 0; inst.y.wrappedValue = 0 } label: { Label(loc("gif.resetPos"), systemImage: "arrow.counterclockwise") }
+                    Spacer()
+                    Button(role: .destructive) { gifInstances.remove(inst.id) } label: { Label(loc("common.delete"), systemImage: "trash") }
+                }
+            }
+            .padding(.top, 4)
+        } label: {
+            HStack(spacing: 8) {
+                AnimatedAssetView(path: inst.path.wrappedValue, playing: false)
+                    .frame(width: 34, height: 34)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                Text((inst.path.wrappedValue as NSString).lastPathComponent).font(.caption).lineLimit(1)
+            }
+        }
+    }
+
     private func gifThumb(_ item: GifItem) -> some View {
         let path = gifs.localPath(item)
-        let active = prefs.gifPath == path
         return VStack(spacing: 4) {
-            AnimatedGifView(path: path)
+            AnimatedAssetView(path: path, playing: false)
                 .frame(width: 70, height: 70)
                 .clipShape(RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(active ? Color.accentColor : Color.white.opacity(0.12), lineWidth: active ? 2 : 1))
-                .onTapGesture { prefs.gifPath = active ? "" : path }
-            Button(role: .destructive) {
-                if active { prefs.gifPath = "" }
-                gifs.remove(item)
-            } label: { Image(systemName: "trash").font(.caption2) }
-                .buttonStyle(.plain).foregroundStyle(.red)
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.12)))
+            HStack(spacing: 6) {
+                Button { gifInstances.add(path: path) } label: { Image(systemName: "plus.circle.fill") }
+                    .buttonStyle(.plain).foregroundStyle(Color.accentColor).help(loc("gif.addCanvas"))
+                Button(role: .destructive) { gifs.remove(item) } label: { Image(systemName: "trash").font(.caption2) }
+                    .buttonStyle(.plain).foregroundStyle(.red)
+            }
         }
     }
 
@@ -206,14 +234,14 @@ struct SettingsTab: View {
         panel.allowsMultipleSelection = false
         panel.allowedContentTypes = [.gif, .image]
         if panel.runModal() == .OK, let url = panel.url, let item = gifs.importFile(url) {
-            prefs.gifPath = gifs.localPath(item)
+            gifInstances.add(path: gifs.localPath(item))
         }
     }
 
     private func addGifURL() {
         let url = gifURLField
         gifs.download(from: url) { item in
-            if let item { prefs.gifPath = gifs.localPath(item) }
+            if let item { gifInstances.add(path: gifs.localPath(item)) }
         }
         gifURLField = ""
     }

@@ -91,13 +91,20 @@ struct InvertIf: ViewModifier {
     }
 }
 
+/// NSImageView that never participates in hit-testing, so it can't steal clicks/drags from SwiftUI.
+final class PassthroughImageView: NSImageView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
 struct AnimatedGifView: NSViewRepresentable {
     let path: String
     var fit: Bool = true
+    /// When false, the first frame is shown without animating (cheap; used for previews).
+    var animating: Bool = true
 
     func makeNSView(context: Context) -> NSImageView {
-        let view = NSImageView()
-        view.animates = true
+        let view = PassthroughImageView()
+        view.animates = animating
         view.canDrawSubviewsIntoLayer = true
         view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         view.setContentCompressionResistancePriority(.defaultLow, for: .vertical)
@@ -110,13 +117,26 @@ struct AnimatedGifView: NSViewRepresentable {
             context.coordinator.path = path
         }
         nsView.imageScaling = fit ? .scaleProportionallyUpOrDown : .scaleAxesIndependently
-        nsView.animates = true
+        nsView.animates = animating
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     final class Coordinator {
         var path: String = ""
+    }
+}
+
+/// Renders an animated asset from disk. GIF-only since the Lottie integration was removed;
+/// kept under this name so existing call sites stay unchanged.
+struct AnimatedAssetView: View {
+    let path: String
+    var fit: Bool = true
+    /// When false, the asset is shown as a static still (first frame) with no animation / CPU cost.
+    var playing: Bool = true
+
+    var body: some View {
+        AnimatedGifView(path: path, fit: fit, animating: playing)
     }
 }
 

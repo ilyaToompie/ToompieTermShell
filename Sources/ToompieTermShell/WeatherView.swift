@@ -101,8 +101,13 @@ final class WeatherEffectView: NSView {
     private func makeEmitter(_ effect: WeatherEffect) -> CAEmitterLayer {
         let spec = Self.spec(for: effect)
         let emitter = CAEmitterLayer()
-        emitter.renderMode = (effect == .embers || effect == .fireflies || effect == .stars || effect == .sparkles || effect == .bokeh) ? .additive : .unordered
+        let additive: Set<WeatherEffect> = [.embers, .fireflies, .stars, .sparkles, .bokeh, .dust, .meteors, .lanterns, .glitter]
+        emitter.renderMode = additive.contains(effect) ? .additive : .unordered
         emitter.beginTime = CACurrentMediaTime()
+        if effect == .rain {
+            emitter.emitterCells = Self.rainCells()
+            return emitter
+        }
         var cells: [CAEmitterCell] = []
         for kind in spec.kinds {
             for color in spec.colors {
@@ -165,13 +170,50 @@ final class WeatherEffectView: NSView {
             return EffectSpec(kinds: [.leaf], colors: [NSColor(calibratedRed: 1, green: 0.8, blue: 0.88, alpha: 1), NSColor(calibratedRed: 1, green: 0.7, blue: 0.82, alpha: 1)], birthRate: 16, lifetime: 12, velocity: 45, velocityRange: 22, yAcceleration: -34, xAcceleration: 16, emissionLongitude: .pi, emissionRange: 0.6, scale: 0.4, scaleRange: 0.25, spin: 1.2, spinRange: 1.8, origin: .top, baseSize: 16)
         case .bokeh:
             return EffectSpec(kinds: [.dot], colors: [NSColor(calibratedRed: 0.6, green: 0.8, blue: 1, alpha: 0.5), NSColor(calibratedRed: 1, green: 0.7, blue: 0.9, alpha: 0.5), NSColor(calibratedRed: 0.8, green: 1, blue: 0.8, alpha: 0.5)], birthRate: 8, lifetime: 8, velocity: 10, velocityRange: 14, yAcceleration: 6, xAcceleration: 4, emissionLongitude: 0, emissionRange: .pi * 2, scale: 1.1, scaleRange: 0.8, scaleSpeed: 0.05, alphaSpeed: -0.1, origin: .area, baseSize: 40)
+        case .dust:
+            return EffectSpec(kinds: [.dot], colors: [NSColor(calibratedWhite: 0.92, alpha: 0.55), NSColor(calibratedRed: 1, green: 0.96, blue: 0.85, alpha: 0.5)], birthRate: 20, lifetime: 14, velocity: 9, velocityRange: 9, yAcceleration: 2, xAcceleration: 7, emissionLongitude: 0, emissionRange: .pi * 2, scale: 0.12, scaleRange: 0.09, alphaSpeed: -0.04, alphaRange: 0.25, origin: .area, baseSize: 10)
+        case .fog:
+            return EffectSpec(kinds: [.dot], colors: [NSColor(calibratedWhite: 0.82, alpha: 0.16), NSColor(calibratedWhite: 0.7, alpha: 0.14)], birthRate: 4, lifetime: 18, velocity: 22, velocityRange: 12, yAcceleration: 0, xAcceleration: 5, emissionLongitude: 0, emissionRange: 0.6, scale: 2.4, scaleRange: 1.3, scaleSpeed: 0.05, alphaSpeed: -0.012, origin: .area, baseSize: 60)
+        case .meteors:
+            return EffectSpec(kinds: [.rainLine], colors: [.white, NSColor(calibratedRed: 0.7, green: 0.85, blue: 1, alpha: 1)], birthRate: 6, lifetime: 4, velocity: 540, velocityRange: 140, yAcceleration: -200, xAcceleration: -200, emissionLongitude: -.pi / 2 - 0.6, emissionRange: 0.06, scale: 0.9, scaleRange: 0.3, alphaSpeed: -0.16, origin: .top, baseSize: 26)
+        case .lanterns:
+            return EffectSpec(kinds: [.dot], colors: [NSColor(calibratedRed: 1, green: 0.75, blue: 0.35, alpha: 1), NSColor(calibratedRed: 1, green: 0.5, blue: 0.2, alpha: 1)], birthRate: 8, lifetime: 12, velocity: 42, velocityRange: 18, yAcceleration: 18, xAcceleration: 8, emissionLongitude: .pi / 2, emissionRange: 0.35, scale: 0.4, scaleRange: 0.2, alphaSpeed: -0.05, alphaRange: 0.2, origin: .bottom, baseSize: 22)
+        case .glitter:
+            return EffectSpec(kinds: [.star, .dot], colors: [NSColor(calibratedRed: 1, green: 0.9, blue: 0.5, alpha: 1), NSColor(calibratedRed: 0.7, green: 0.9, blue: 1, alpha: 1), NSColor(calibratedRed: 1, green: 0.7, blue: 0.9, alpha: 1), .white], birthRate: 44, lifetime: 2.0, velocity: 6, velocityRange: 10, yAcceleration: 0, xAcceleration: 0, emissionLongitude: 0, emissionRange: .pi * 2, scale: 0.16, scaleRange: 0.14, scaleSpeed: -0.05, spin: 1.2, spinRange: 1.4, alphaSpeed: -0.5, origin: .area, baseSize: 12)
+        }
+    }
+
+    private static func rainCells() -> [CAEmitterCell] {
+        let drop = NSColor(calibratedRed: 0.78, green: 0.86, blue: 1.0, alpha: 1.0)
+        let image = particleImage(kind: .rainLine, color: drop, size: 30)
+        let layers: [(scale: CGFloat, velocity: CGFloat, alpha: CGFloat, birth: Float, life: Float)] = [
+            (0.42, 620, 0.28, 140, 1.5),
+            (0.68, 860, 0.42, 95, 1.15),
+            (1.0, 1080, 0.6, 60, 0.95)
+        ]
+        return layers.map { layer in
+            let cell = CAEmitterCell()
+            cell.contents = image
+            cell.birthRate = layer.birth
+            cell.lifetime = layer.life
+            cell.lifetimeRange = layer.life * 0.3
+            cell.velocity = layer.velocity
+            cell.velocityRange = layer.velocity * 0.18
+            cell.yAcceleration = -900
+            cell.emissionLongitude = -.pi / 2 - 0.12
+            cell.emissionRange = 0.04
+            cell.scale = layer.scale
+            cell.scaleRange = layer.scale * 0.25
+            cell.alphaSpeed = -0.04
+            cell.color = NSColor.white.withAlphaComponent(layer.alpha).cgColor
+            return cell
         }
     }
 
     private static func particleImage(kind: ParticleKind, color: NSColor, size: CGFloat) -> CGImage? {
         let dimension: NSSize
         switch kind {
-        case .rainLine: dimension = NSSize(width: max(size * 0.14, 2), height: size)
+        case .rainLine: dimension = NSSize(width: max(size * 0.09, 2), height: size * 1.3)
         default: dimension = NSSize(width: size, height: size)
         }
         let image = NSImage(size: dimension)
@@ -183,7 +225,14 @@ final class WeatherEffectView: NSView {
             color.setFill()
             NSBezierPath(ovalIn: rect.insetBy(dx: size * 0.1, dy: size * 0.1)).fill()
         case .rainLine:
-            NSBezierPath(roundedRect: rect, xRadius: dimension.width / 2, yRadius: dimension.width / 2).fill()
+            let streak = NSBezierPath(roundedRect: rect, xRadius: dimension.width / 2, yRadius: dimension.width / 2)
+            if let gradient = NSGradient(colors: [NSColor.clear, color.withAlphaComponent(0.9), color, NSColor.clear],
+                                         atLocations: [0.0, 0.35, 0.7, 1.0],
+                                         colorSpace: .deviceRGB) {
+                gradient.draw(in: streak, angle: 90)
+            } else {
+                streak.fill()
+            }
         case .ring:
             let path = NSBezierPath(ovalIn: rect.insetBy(dx: size * 0.12, dy: size * 0.12))
             path.lineWidth = size * 0.12

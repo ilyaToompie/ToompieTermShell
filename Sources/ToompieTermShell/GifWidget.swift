@@ -1,49 +1,46 @@
 import SwiftUI
 
 struct GifWidget: View {
-    @ObservedObject var prefs: AppPreferences
+    @Binding var instance: GifInstance
+    let editable: Bool
     @State private var dragStart: CGSize?
     @State private var sizeStart: Double?
 
     var body: some View {
-        if !prefs.gifPath.isEmpty {
-            content
-                .offset(x: prefs.gifOffsetX, y: prefs.gifOffsetY)
-                .gesture(prefs.gifEditable ? dragGesture : nil)
-                .animation(.interactiveSpring(), value: prefs.gifEditable)
-        }
+        content
+            .contentShape(Rectangle())
+            .offset(x: instance.x, y: instance.y)
+            .gesture(editable ? dragGesture : nil)
     }
 
     private var content: some View {
-        let radius = prefs.gifShowBox ? prefs.gifCornerRadius : 0
+        let radius = instance.showBox ? instance.cornerRadius : 0
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         return ZStack(alignment: .bottomTrailing) {
-            AnimatedGifView(path: prefs.gifPath, fit: prefs.gifFit)
-                .scaleEffect(prefs.gifInnerScale)
-                .scaleEffect(x: prefs.gifFlip ? -1 : 1, y: 1)
-                .rotationEffect(.degrees(prefs.gifRotation))
-                .frame(width: prefs.gifSize, height: prefs.gifSize)
-                .opacity(prefs.gifOpacity)
+            AnimatedAssetView(path: instance.path, fit: instance.fit)
+                .scaleEffect(instance.innerScale)
+                .scaleEffect(x: instance.flip ? -1 : 1, y: 1)
+                .rotationEffect(.degrees(instance.rotation))
+                .frame(width: instance.size, height: instance.size)
+                .opacity(instance.opacity)
                 .background(boxBackground)
                 .clipShape(shape)
-                .overlay(
-                    shape.stroke(Color.white.opacity(prefs.gifBorder && prefs.gifShowBox ? 0.2 : 0))
-                )
+                .overlay(shape.stroke(Color.white.opacity(instance.border && instance.showBox ? 0.2 : 0)))
                 .overlay(editChrome(shape))
 
-            if prefs.gifEditable {
+            if editable {
                 resizeHandle
             }
         }
-        .frame(width: prefs.gifSize, height: prefs.gifSize)
+        .frame(width: instance.size, height: instance.size)
     }
 
     @ViewBuilder
     private var boxBackground: some View {
-        if prefs.gifShowBox {
+        if instance.showBox {
             ZStack {
                 Rectangle().fill(.ultraThinMaterial)
-                Color.black.opacity(prefs.gifBoxOpacity)
+                Color.black.opacity(instance.boxOpacity)
             }
         } else {
             Color.clear
@@ -52,7 +49,7 @@ struct GifWidget: View {
 
     @ViewBuilder
     private func editChrome(_ shape: RoundedRectangle) -> some View {
-        if prefs.gifEditable {
+        if editable {
             shape.stroke(style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
                 .foregroundStyle(Color.accentColor)
         }
@@ -68,9 +65,9 @@ struct GifWidget: View {
             .gesture(
                 DragGesture()
                     .onChanged { value in
-                        if sizeStart == nil { sizeStart = prefs.gifSize }
+                        if sizeStart == nil { sizeStart = instance.size }
                         let delta = (value.translation.width + value.translation.height) / 2
-                        prefs.gifSize = min(max((sizeStart ?? prefs.gifSize) + delta, 48), 360)
+                        instance.size = min(max((sizeStart ?? instance.size) + delta, 48), 400)
                     }
                     .onEnded { _ in sizeStart = nil }
             )
@@ -79,9 +76,9 @@ struct GifWidget: View {
     private var dragGesture: some Gesture {
         DragGesture()
             .onChanged { value in
-                if dragStart == nil { dragStart = CGSize(width: prefs.gifOffsetX, height: prefs.gifOffsetY) }
-                prefs.gifOffsetX = (dragStart?.width ?? 0) + value.translation.width
-                prefs.gifOffsetY = (dragStart?.height ?? 0) + value.translation.height
+                if dragStart == nil { dragStart = CGSize(width: instance.x, height: instance.y) }
+                instance.x = (dragStart?.width ?? 0) + value.translation.width
+                instance.y = (dragStart?.height ?? 0) + value.translation.height
             }
             .onEnded { _ in dragStart = nil }
     }
