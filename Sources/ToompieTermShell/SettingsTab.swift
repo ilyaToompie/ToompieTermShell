@@ -186,6 +186,20 @@ struct SettingsTab: View {
                     Toggle(loc("gif.border"), isOn: inst.border)
                 }
                 HStack {
+                    Text(loc("gif.action")).font(.callout.weight(.medium))
+                    Spacer()
+                    Picker("", selection: inst.tapAction) {
+                        ForEach(GifTapAction.allCases) { action in
+                            Text(loc(action.labelKey)).tag(action)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(width: 220)
+                }
+                if inst.tapAction.wrappedValue != .none {
+                    Text(loc("gif.actionHint")).font(.caption2).foregroundStyle(.secondary)
+                }
+                HStack {
                     Button { inst.x.wrappedValue = 0; inst.y.wrappedValue = 0 } label: { Label(loc("gif.resetPos"), systemImage: "arrow.counterclockwise") }
                     Spacer()
                     Button(role: .destructive) { gifInstances.remove(inst.id) } label: { Label(loc("common.delete"), systemImage: "trash") }

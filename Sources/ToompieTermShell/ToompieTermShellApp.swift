@@ -74,13 +74,31 @@ struct ToompieTermShellApp: App {
                     NSApplication.shared.orderFrontStandardAboutPanel(options: [.credits: credits])
                 }
             }
+            // Drop the default ⌘N "New Window" so it can be reused for a new terminal tab.
+            CommandGroup(replacing: .newItem) {}
+
             CommandMenu("Terminal") {
                 Button("Command Palette") {
-                    PaletteController.shared.open = true
+                    PaletteController.shared.present(.basic)
                 }
                 .keyboardShortcut("k", modifiers: [.command])
 
+                Button("Command Palette · Advanced") {
+                    PaletteController.shared.present(.advanced)
+                }
+                .keyboardShortcut("k", modifiers: [.command, .shift])
+
+                Button("Command Palette · Super") {
+                    PaletteController.shared.present(.superA)
+                }
+                .keyboardShortcut("k", modifiers: [.command, .option])
+
                 Divider()
+
+                Button(localization("common.newTab")) {
+                    terminalManager.createTab(in: terminalManager.focusedPanelIndex)
+                }
+                .keyboardShortcut("n", modifiers: [.command])
 
                 Button(localization("common.newTab")) {
                     terminalManager.createTab(in: terminalManager.focusedPanelIndex)

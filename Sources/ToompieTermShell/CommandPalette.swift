@@ -32,6 +32,8 @@ final class PaletteKeyMonitor: ObservableObject {
     var onReturn: () -> Void = {}
     var onEscape: () -> Void = {}
     var onCycle: () -> Void = {}
+    var onNextMode: () -> Void = {}
+    var onPrevMode: () -> Void = {}
     var isEnabled: () -> Bool = { true }
 
     func start() {
@@ -41,9 +43,16 @@ final class PaletteKeyMonitor: ObservableObject {
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
             // ⌘K while the palette is open advances the highlighted command instead of opening again.
             if flags == .command, event.keyCode == 40 { self.onCycle(); return nil }
+            // Tab cycles the disclosure level (⇧Tab goes back) instead of shifting AppKit focus
+            // away from the search field.
+            if event.keyCode == 48 {
+                flags.contains(.shift) ? self.onPrevMode() : self.onNextMode()
+                return nil
+            }
             switch event.keyCode {
-            case 126: self.onUp(); return nil
-            case 125: self.onDown(); return nil
+            // Up / Left step toward the top of the list; Down / Right toward the bottom.
+            case 126, 123: self.onUp(); return nil
+            case 125, 124: self.onDown(); return nil
             case 36, 76: self.onReturn(); return nil
             case 53: self.onEscape(); return nil
             default: return event
@@ -315,6 +324,8 @@ struct CommandPalette: View {
             keys.onUp = { move(-1) }
             keys.onDown = { move(1) }
             keys.onCycle = { cycle(1) }
+            keys.onNextMode = { cycleLevel(1) }
+            keys.onPrevMode = { cycleLevel(-1) }
             keys.onReturn = { runSelected() }
             keys.onEscape = { dismiss() }
             keys.start()
@@ -432,6 +443,15 @@ struct CommandPalette: View {
         let count = filtered.count
         guard count > 0 else { return }
         selection = ((selection + delta) % count + count) % count
+    }
+
+    /// Tab / ⇧Tab cycles the disclosure level (basic ⇄ advanced ⇄ super), wrapping around.
+    private func cycleLevel(_ delta: Int) {
+        let all = PaletteLevel.allCases
+        guard let idx = all.firstIndex(of: controller.level) else { return }
+        let next = ((idx + delta) % all.count + all.count) % all.count
+        controller.level = all[next]
+        selection = 0
     }
 
     private func runSelected() {

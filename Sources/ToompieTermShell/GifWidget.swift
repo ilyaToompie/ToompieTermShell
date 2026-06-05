@@ -6,11 +6,21 @@ struct GifWidget: View {
     @State private var dragStart: CGSize?
     @State private var sizeStart: Double?
 
+    private var actionable: Bool { !editable && instance.tapAction != .none }
+
     var body: some View {
         content
             .contentShape(Rectangle())
             .offset(x: instance.x, y: instance.y)
             .gesture(editable ? dragGesture : nil)
+            .onTapGesture { handleTap() }
+            // Pass clicks through to the terminal unless the GIF is being edited or acts as a button.
+            .allowsHitTesting(editable || actionable)
+    }
+
+    private func handleTap() {
+        guard let level = instance.tapAction.paletteLevel, !editable else { return }
+        PaletteController.shared.present(level)
     }
 
     private var content: some View {

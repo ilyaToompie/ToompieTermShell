@@ -14,12 +14,14 @@ BIN_DIR="$(swift build -c release --show-bin-path)"
 echo "Packaging…"
 cp "$BIN_DIR/ToompieTermShell" "$APP/Contents/MacOS/ToompieTermShell"
 
-# Embed the dynamic Lottie framework so the bundle is self-contained.
-mkdir -p "$APP/Contents/Frameworks"
-rm -rf "$APP/Contents/Frameworks/Lottie.framework"
-cp -R "$BIN_DIR/Lottie.framework" "$APP/Contents/Frameworks/Lottie.framework"
-# Point @rpath at the embedded framework (binary is copied fresh each run, so no duplicate rpaths).
-install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/ToompieTermShell" 2>/dev/null || true
+# No bundled frameworks needed — the Lottie dependency was removed.
+rm -rf "$APP/Contents/Frameworks"
+
+# Quit any running instance so `open` launches the freshly built binary instead of
+# just re-focusing the old in-memory process.
+osascript -e 'quit app "ToompieTermShell"' 2>/dev/null || true
+killall ToompieTermShell 2>/dev/null || true
+sleep 1
 
 rm -rf "$DEST"
 cp -R ToompieTermShell.app "$DEST"
@@ -28,4 +30,4 @@ echo "Signing…"
 codesign --force --deep --sign "$CERT" "$DEST"
 
 echo "Installed to $DEST"
-open "$DEST"
+open -n "$DEST"

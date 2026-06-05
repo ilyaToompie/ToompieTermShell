@@ -55,7 +55,6 @@ struct ContentView: View {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .allowsHitTesting(prefs.gifEditable)
         }
         .navigationTitle(windowTitle)
         .sheet(isPresented: $palette.open) {

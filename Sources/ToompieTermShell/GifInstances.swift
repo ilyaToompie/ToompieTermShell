@@ -1,5 +1,33 @@
 import Foundation
 
+/// What happens when a placed GIF is clicked while the canvas is not in edit mode.
+enum GifTapAction: String, Codable, CaseIterable, Identifiable {
+    case none
+    case paletteBasic
+    case paletteAdvanced
+    case paletteSuper
+
+    var id: String { rawValue }
+
+    var labelKey: String {
+        switch self {
+        case .none: return "gif.action.none"
+        case .paletteBasic: return "gif.action.basic"
+        case .paletteAdvanced: return "gif.action.advanced"
+        case .paletteSuper: return "gif.action.super"
+        }
+    }
+
+    var paletteLevel: PaletteLevel? {
+        switch self {
+        case .none: return nil
+        case .paletteBasic: return .basic
+        case .paletteAdvanced: return .advanced
+        case .paletteSuper: return .superA
+        }
+    }
+}
+
 struct GifInstance: Identifiable, Codable, Equatable {
     var id: UUID
     var path: String
@@ -15,6 +43,7 @@ struct GifInstance: Identifiable, Codable, Equatable {
     var showBox: Bool
     var boxOpacity: Double
     var border: Bool
+    var tapAction: GifTapAction
 
     init(path: String) {
         id = UUID()
@@ -31,6 +60,7 @@ struct GifInstance: Identifiable, Codable, Equatable {
         showBox = false
         boxOpacity = 0
         border = false
+        tapAction = .none
     }
 
     init(from decoder: Decoder) throws {
@@ -49,6 +79,7 @@ struct GifInstance: Identifiable, Codable, Equatable {
         showBox = (try? c.decode(Bool.self, forKey: .showBox)) ?? false
         boxOpacity = (try? c.decode(Double.self, forKey: .boxOpacity)) ?? 0
         border = (try? c.decode(Bool.self, forKey: .border)) ?? false
+        tapAction = (try? c.decode(GifTapAction.self, forKey: .tapAction)) ?? .none
     }
 }
 
