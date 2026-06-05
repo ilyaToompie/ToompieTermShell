@@ -90,6 +90,22 @@ struct PaletteItem: Identifiable {
     let run: (String) -> Void
 }
 
+/// Mutable palette UI state, kept in a reference type so the key-event monitor's closures
+/// (captured once in `.onAppear`) always read and write the *live* values. Holding these as
+/// view-local `@State` made the closures observe a stale snapshot — arrows appeared stuck on
+/// the first rows and `Return` could fire the wrong command.
+@MainActor
+final class PaletteModel: ObservableObject {
+    @Published var query = ""
+    @Published var selection = 0
+    @Published var pending: PaletteItem?
+    @Published var inputText = ""
+
+    /// The currently displayed (filtered) rows, refreshed by the view on every render. Not
+    /// `@Published` on purpose: it's read by the key monitor, never drives a re-render itself.
+    var visible: [PaletteItem] = []
+}
+
 struct CommandPalette: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var loc: LocalizationManager
@@ -103,10 +119,7 @@ struct CommandPalette: View {
     @Query(sort: \Project.name) private var projects: [Project]
 
     @StateObject private var keys = PaletteKeyMonitor()
-    @State private var query = ""
-    @State private var selection = 0
-    @State private var pending: PaletteItem?
-    @State private var inputText = ""
+    @StateObject private var model = PaletteModel()
     @FocusState private var searchFocused: Bool
     @FocusState private var inputFocused: Bool
 
@@ -299,7 +312,7 @@ struct CommandPalette: View {
     }
 
     private var filtered: [PaletteItem] {
-        let q = query.trimmingCharacters(in: .whitespaces).lowercased()
+        let q = model.query.trimmingCharacters(in: .whitespaces).lowercased()
         guard !q.isEmpty else { return items }
         return items
             .compactMap { item in matchScore(item, q).map { (item, $0) } }
@@ -307,11 +320,20 @@ struct CommandPalette: View {
             .map { $0.0 }
     }
 
+    /// `filtered`, but it also pushes the result into the model so the key monitor reads the
+    /// live list. Assigning a non-`@Published` property doesn't re-trigger a view update, so
+    /// it's safe to do this during body evaluation.
+    private var visibleItems: [PaletteItem] {
+        let result = filtered
+        model.visible = result
+        return result
+    }
+
     // MARK: - Body
 
     var body: some View {
         Group {
-            if let pending {
+            if let pending = model.pending {
                 inputView(pending)
             } else {
                 searchView
@@ -320,7 +342,7 @@ struct CommandPalette: View {
         .frame(width: 600, height: 460)
         .background(.ultraThinMaterial)
         .onAppear {
-            keys.isEnabled = { pending == nil }
+            keys.isEnabled = { model.pending == nil }
             keys.onUp = { move(-1) }
             keys.onDown = { move(1) }
             keys.onCycle = { cycle(1) }
@@ -337,12 +359,12 @@ struct CommandPalette: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField(loc("search.placeholder"), text: $query)
+                TextField(loc("search.placeholder"), text: $model.query)
                     .textFieldStyle(.plain)
                     .font(.title3)
                     .focused($searchFocused)
                     .onSubmit(runSelected)
-                    .onChange(of: query) { _, _ in selection = 0 }
+                    .onChange(of: model.query) { _, _ in model.selection = 0 }
                 Picker("", selection: $controller.level) {
                     ForEach(PaletteLevel.allCases) { lvl in
                         Text(loc(lvl.labelKey)).tag(lvl)
@@ -351,29 +373,33 @@ struct CommandPalette: View {
                 .labelsHidden()
                 .pickerStyle(.segmented)
                 .frame(width: 230)
-                .onChange(of: controller.level) { _, _ in selection = 0 }
+                .onChange(of: controller.level) { _, _ in model.selection = 0 }
             }
             .padding(14)
             Divider()
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(spacing: 2) {
-                        ForEach(Array(filtered.enumerated()), id: \.element.id) { index, item in
-                            row(item, active: index == selection)
+                        // Key rows by position, not by `PaletteItem.id`: `items` is recomputed
+                        // every render, so the UUIDs change each time and ForEach would tear
+                        // down and rebuild the whole list (breaking the selection highlight and
+                        // leaving stale rows after a search). Positional ids stay stable.
+                        ForEach(Array(visibleItems.enumerated()), id: \.offset) { index, item in
+                            row(item, active: index == model.selection)
                                 .id(index)
                                 .contentShape(Rectangle())
-                                .onTapGesture { selection = index; runSelected() }
+                                .onTapGesture { model.selection = index; runSelected() }
                         }
                     }
                     .padding(8)
                 }
-                .onChange(of: selection) { _, new in
+                .onChange(of: model.selection) { _, new in
                     // Spotlight-style: scroll only enough to keep the selected row on screen.
                     proxy.scrollTo(new, anchor: nil)
                 }
             }
         }
-        .onAppear { searchFocused = true; selection = 0 }
+        .onAppear { searchFocused = true; model.selection = 0 }
         .onExitCommand { dismiss() }
     }
 
@@ -386,17 +412,17 @@ struct CommandPalette: View {
                 Text(item.title).font(.headline)
                 Spacer()
             }
-            TextField(item.inputPrompt ?? "", text: $inputText)
+            TextField(item.inputPrompt ?? "", text: $model.inputText)
                 .textFieldStyle(.roundedBorder)
                 .font(.title3)
                 .focused($inputFocused)
                 .onSubmit { confirmInput(item) }
             HStack {
                 Spacer()
-                Button(loc("common.cancel")) { pending = nil; inputText = "" }
+                Button(loc("common.cancel")) { model.pending = nil; model.inputText = "" }
                 Button(loc("common.run")) { confirmInput(item) }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(inputText.isEmpty)
+                    .disabled(model.inputText.isEmpty)
             }
         }
         .padding(22)
@@ -406,7 +432,7 @@ struct CommandPalette: View {
             // The field lives inside a sheet; a deferred focus makes the auto-focus reliable.
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { inputFocused = true }
         }
-        .onExitCommand { pending = nil; inputText = "" }
+        .onExitCommand { model.pending = nil; model.inputText = "" }
     }
 
     private func row(_ item: PaletteItem, active: Bool) -> some View {
@@ -433,16 +459,16 @@ struct CommandPalette: View {
     }
 
     private func move(_ delta: Int) {
-        let count = filtered.count
+        let count = model.visible.count
         guard count > 0 else { return }
-        selection = min(max(selection + delta, 0), count - 1)
+        model.selection = min(max(model.selection + delta, 0), count - 1)
     }
 
     /// ⌘K wraps around the list rather than stopping at the ends.
     private func cycle(_ delta: Int) {
-        let count = filtered.count
+        let count = model.visible.count
         guard count > 0 else { return }
-        selection = ((selection + delta) % count + count) % count
+        model.selection = ((model.selection + delta) % count + count) % count
     }
 
     /// Tab / ⇧Tab cycles the disclosure level (basic ⇄ advanced ⇄ super), wrapping around.
@@ -451,16 +477,16 @@ struct CommandPalette: View {
         guard let idx = all.firstIndex(of: controller.level) else { return }
         let next = ((idx + delta) % all.count + all.count) % all.count
         controller.level = all[next]
-        selection = 0
+        model.selection = 0
     }
 
     private func runSelected() {
-        let list = filtered
-        guard list.indices.contains(selection) else { return }
-        let item = list[selection]
+        let list = model.visible
+        guard list.indices.contains(model.selection) else { return }
+        let item = list[model.selection]
         if item.inputPrompt != nil {
-            inputText = ""
-            pending = item
+            model.inputText = ""
+            model.pending = item
         } else {
             item.run("")
             dismiss()
@@ -468,10 +494,10 @@ struct CommandPalette: View {
     }
 
     private func confirmInput(_ item: PaletteItem) {
-        guard !inputText.isEmpty else { return }
-        item.run(inputText)
-        pending = nil
-        inputText = ""
+        guard !model.inputText.isEmpty else { return }
+        item.run(model.inputText)
+        model.pending = nil
+        model.inputText = ""
         dismiss()
     }
 }
