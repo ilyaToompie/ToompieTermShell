@@ -112,6 +112,18 @@ enum WeatherEffect: String, CaseIterable, Identifiable {
     case meteors
     case lanterns
     case glitter
+    case aurora
+    case fireworks
+    case smoke
+    case plasma
+    case ripples
+    case rainbow
+    case notes
+    case bats
+    case ghosts
+    case pumpkins
+    case balloons
+    case coins
 
     var id: String { rawValue }
 
@@ -138,6 +150,18 @@ enum WeatherEffect: String, CaseIterable, Identifiable {
         case .meteors: return "moon.stars.fill"
         case .lanterns: return "lightbulb.fill"
         case .glitter: return "sparkle"
+        case .aurora: return "sun.haze.fill"
+        case .fireworks: return "fireworks"
+        case .smoke: return "smoke.fill"
+        case .plasma: return "atom"
+        case .ripples: return "dot.radiowaves.left.and.right"
+        case .rainbow: return "rainbow"
+        case .notes: return "music.note"
+        case .bats: return "bird.fill"
+        case .ghosts: return "theatermasks.fill"
+        case .pumpkins: return "carrot.fill"
+        case .balloons: return "balloon.fill"
+        case .coins: return "dollarsign.circle.fill"
         }
     }
 }

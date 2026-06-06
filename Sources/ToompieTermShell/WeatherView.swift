@@ -101,7 +101,7 @@ final class WeatherEffectView: NSView {
     private func makeEmitter(_ effect: WeatherEffect) -> CAEmitterLayer {
         let spec = Self.spec(for: effect)
         let emitter = CAEmitterLayer()
-        let additive: Set<WeatherEffect> = [.embers, .fireflies, .stars, .sparkles, .bokeh, .dust, .meteors, .lanterns, .glitter]
+        let additive: Set<WeatherEffect> = [.embers, .fireflies, .stars, .sparkles, .bokeh, .dust, .meteors, .lanterns, .glitter, .aurora, .fireworks, .plasma]
         emitter.renderMode = additive.contains(effect) ? .additive : .unordered
         emitter.beginTime = CACurrentMediaTime()
         if effect == .rain {
@@ -180,6 +180,30 @@ final class WeatherEffectView: NSView {
             return EffectSpec(kinds: [.dot], colors: [NSColor(calibratedRed: 1, green: 0.75, blue: 0.35, alpha: 1), NSColor(calibratedRed: 1, green: 0.5, blue: 0.2, alpha: 1)], birthRate: 8, lifetime: 12, velocity: 42, velocityRange: 18, yAcceleration: 18, xAcceleration: 8, emissionLongitude: .pi / 2, emissionRange: 0.35, scale: 0.4, scaleRange: 0.2, alphaSpeed: -0.05, alphaRange: 0.2, origin: .bottom, baseSize: 22)
         case .glitter:
             return EffectSpec(kinds: [.star, .dot], colors: [NSColor(calibratedRed: 1, green: 0.9, blue: 0.5, alpha: 1), NSColor(calibratedRed: 0.7, green: 0.9, blue: 1, alpha: 1), NSColor(calibratedRed: 1, green: 0.7, blue: 0.9, alpha: 1), .white], birthRate: 44, lifetime: 2.0, velocity: 6, velocityRange: 10, yAcceleration: 0, xAcceleration: 0, emissionLongitude: 0, emissionRange: .pi * 2, scale: 0.16, scaleRange: 0.14, scaleSpeed: -0.05, spin: 1.2, spinRange: 1.4, alphaSpeed: -0.5, origin: .area, baseSize: 12)
+        case .aurora:
+            return EffectSpec(kinds: [.dot], colors: [NSColor(calibratedRed: 0.3, green: 1.0, blue: 0.6, alpha: 0.4), NSColor(calibratedRed: 0.3, green: 0.85, blue: 0.95, alpha: 0.35), NSColor(calibratedRed: 0.6, green: 0.4, blue: 1.0, alpha: 0.35)], birthRate: 6, lifetime: 16, velocity: 16, velocityRange: 10, yAcceleration: 0, xAcceleration: 6, emissionLongitude: 0, emissionRange: 0.4, scale: 2.6, scaleRange: 1.2, scaleSpeed: 0.04, alphaSpeed: -0.025, origin: .area, baseSize: 60)
+        case .fireworks:
+            return EffectSpec(kinds: [.dot, .star], colors: [NSColor(calibratedRed: 1, green: 0.3, blue: 0.4, alpha: 1), NSColor(calibratedRed: 1, green: 0.85, blue: 0.3, alpha: 1), NSColor(calibratedRed: 0.4, green: 0.7, blue: 1, alpha: 1), NSColor(calibratedRed: 0.6, green: 1, blue: 0.5, alpha: 1), NSColor(calibratedRed: 1, green: 0.5, blue: 0.9, alpha: 1)], birthRate: 34, lifetime: 1.7, velocity: 120, velocityRange: 80, yAcceleration: -90, xAcceleration: 0, emissionLongitude: 0, emissionRange: .pi * 2, scale: 0.16, scaleRange: 0.12, scaleSpeed: -0.05, spin: 1.0, spinRange: 1.5, alphaSpeed: -0.5, origin: .area, baseSize: 12)
+        case .smoke:
+            return EffectSpec(kinds: [.dot], colors: [NSColor(calibratedWhite: 0.55, alpha: 0.18), NSColor(calibratedWhite: 0.42, alpha: 0.15)], birthRate: 6, lifetime: 12, velocity: 40, velocityRange: 18, yAcceleration: 10, xAcceleration: 7, emissionLongitude: .pi / 2, emissionRange: 0.5, scale: 1.1, scaleRange: 0.6, scaleSpeed: 0.13, alphaSpeed: -0.02, origin: .bottom, baseSize: 52)
+        case .plasma:
+            return EffectSpec(kinds: [.dot], colors: [NSColor(calibratedRed: 1, green: 0.3, blue: 0.8, alpha: 0.4), NSColor(calibratedRed: 0.3, green: 0.9, blue: 1, alpha: 0.4), NSColor(calibratedRed: 0.6, green: 0.4, blue: 1, alpha: 0.4)], birthRate: 7, lifetime: 10, velocity: 12, velocityRange: 14, yAcceleration: 0, xAcceleration: 0, emissionLongitude: 0, emissionRange: .pi * 2, scale: 1.4, scaleRange: 1.0, scaleSpeed: 0.04, alphaSpeed: -0.05, origin: .area, baseSize: 46)
+        case .ripples:
+            return EffectSpec(kinds: [.ring], colors: [NSColor(calibratedRed: 0.6, green: 0.85, blue: 1, alpha: 0.7), NSColor(calibratedWhite: 1, alpha: 0.6)], birthRate: 8, lifetime: 4, velocity: 0, velocityRange: 4, yAcceleration: 0, xAcceleration: 0, emissionLongitude: 0, emissionRange: .pi * 2, scale: 0.1, scaleRange: 0.05, scaleSpeed: 0.9, alphaSpeed: -0.25, origin: .area, baseSize: 60)
+        case .rainbow:
+            return EffectSpec(kinds: [.dot], colors: [NSColor(calibratedRed: 1, green: 0.32, blue: 0.32, alpha: 1), NSColor(calibratedRed: 1, green: 0.62, blue: 0.25, alpha: 1), NSColor(calibratedRed: 1, green: 0.9, blue: 0.3, alpha: 1), NSColor(calibratedRed: 0.35, green: 0.85, blue: 0.4, alpha: 1), NSColor(calibratedRed: 0.3, green: 0.6, blue: 1, alpha: 1), NSColor(calibratedRed: 0.6, green: 0.4, blue: 1, alpha: 1)], birthRate: 30, lifetime: 10, velocity: 45, velocityRange: 20, yAcceleration: -30, xAcceleration: 8, emissionLongitude: .pi, emissionRange: 0.6, scale: 0.4, scaleRange: 0.25, spin: 0.4, spinRange: 0.8, alphaSpeed: -0.04, origin: .top, baseSize: 14)
+        case .notes:
+            return EffectSpec(kinds: [.glyph("♪"), .glyph("♫"), .glyph("♬"), .glyph("♩")], colors: [NSColor(calibratedRed: 1, green: 0.5, blue: 0.8, alpha: 1), NSColor(calibratedRed: 0.6, green: 0.5, blue: 1, alpha: 1), NSColor(calibratedRed: 0.4, green: 0.8, blue: 1, alpha: 1)], birthRate: 10, lifetime: 9, velocity: 50, velocityRange: 22, yAcceleration: 18, xAcceleration: 16, emissionLongitude: .pi / 2, emissionRange: 0.5, scale: 0.85, scaleRange: 0.3, spin: 0.3, spinRange: 0.8, alphaSpeed: -0.05, origin: .bottom, baseSize: 20)
+        case .bats:
+            return EffectSpec(kinds: [.glyph("🦇")], colors: [.white], birthRate: 8, lifetime: 9, velocity: 60, velocityRange: 30, yAcceleration: -30, xAcceleration: 30, emissionLongitude: .pi, emissionRange: 0.9, scale: 0.9, scaleRange: 0.3, spin: 0.3, spinRange: 1.2, origin: .top, baseSize: 26)
+        case .ghosts:
+            return EffectSpec(kinds: [.glyph("👻")], colors: [.white], birthRate: 7, lifetime: 11, velocity: 38, velocityRange: 18, yAcceleration: 14, xAcceleration: 12, emissionLongitude: .pi / 2, emissionRange: 0.4, scale: 0.9, scaleRange: 0.25, spin: 0.2, spinRange: 0.6, alphaSpeed: -0.05, origin: .bottom, baseSize: 26)
+        case .pumpkins:
+            return EffectSpec(kinds: [.glyph("🎃")], colors: [.white], birthRate: 8, lifetime: 11, velocity: 55, velocityRange: 25, yAcceleration: -50, xAcceleration: 8, emissionLongitude: .pi, emissionRange: 0.5, scale: 0.95, scaleRange: 0.25, spin: 1.0, spinRange: 1.6, origin: .top, baseSize: 26)
+        case .balloons:
+            return EffectSpec(kinds: [.glyph("🎈")], colors: [.white], birthRate: 7, lifetime: 13, velocity: 42, velocityRange: 18, yAcceleration: 16, xAcceleration: 8, emissionLongitude: .pi / 2, emissionRange: 0.35, scale: 1.0, scaleRange: 0.25, spin: 0.2, spinRange: 0.6, alphaSpeed: -0.03, origin: .bottom, baseSize: 28)
+        case .coins:
+            return EffectSpec(kinds: [.glyph("🪙"), .glyph("💰")], colors: [.white], birthRate: 14, lifetime: 8, velocity: 70, velocityRange: 30, yAcceleration: -90, xAcceleration: 6, emissionLongitude: .pi, emissionRange: 0.4, scale: 0.85, scaleRange: 0.25, spin: 2.0, spinRange: 3.0, origin: .top, baseSize: 24)
         }
     }
 
