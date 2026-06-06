@@ -6,6 +6,7 @@ struct ContentView: View {
     @EnvironmentObject private var prefs: AppPreferences
     @StateObject private var palette = PaletteController.shared
     @StateObject private var gifStore = GifInstanceStore.shared
+    @StateObject private var cli = CLILauncher.shared
     @State private var parallax: CGSize = .zero
     @AppStorage("lastSelectedSidebarTab") private var selectedSidebarTabRawValue = SidebarTab.ssh.rawValue
     @AppStorage("sidebarWidth") private var sidebarWidth = 320.0
@@ -56,6 +57,12 @@ struct ContentView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .overlay(alignment: .bottomLeading) {
+            if cli.shouldShowPrompt {
+                CLIInstallPrompt()
+            }
+        }
+        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: cli.shouldShowPrompt)
         .navigationTitle(windowTitle)
         .sheet(isPresented: $palette.open) {
             CommandPalette()

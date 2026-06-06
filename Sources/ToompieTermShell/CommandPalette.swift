@@ -63,6 +63,12 @@ final class PaletteKeyMonitor: ObservableObject {
     func stop() {
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
+        // Drop the captured closures too. Each one retains a copy of the SwiftUI view, which in
+        // turn retains this monitor through its @StateObject — a self → keys → closure → self
+        // cycle that would otherwise outlive the dismissed sheet and leak a palette per open.
+        onUp = {}; onDown = {}; onReturn = {}; onEscape = {}
+        onCycle = {}; onNextMode = {}; onPrevMode = {}
+        isEnabled = { true }
     }
 }
 
@@ -79,6 +85,37 @@ final class PaletteController: ObservableObject {
     }
 }
 
+/// Visual + ordering groups for palette rows. `allCases` order is the on-screen order, so the
+/// user's own saved items — favourite directories ("locations") first — sit above the large
+/// built-in command catalogue instead of being buried in it.
+enum PaletteSection: Int, CaseIterable {
+    case favourites   // pinned directories ("locations")
+    case commands     // saved command shortcuts
+    case connections  // saved SSH shortcuts
+    case scopes       // global / project scope switch
+    case builtin      // built-in command catalogue
+
+    var titleKey: String {
+        switch self {
+        case .favourites: return "tab.locations"
+        case .commands: return "tab.commands"
+        case .connections: return "tab.ssh"
+        case .scopes: return "projects.scope"
+        case .builtin: return "palette.builtin"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .favourites: return "mappin.and.ellipse"
+        case .commands: return "terminal.fill"
+        case .connections: return "network"
+        case .scopes: return "globe"
+        case .builtin: return "wand.and.stars"
+        }
+    }
+}
+
 struct PaletteItem: Identifiable {
     let id = UUID()
     let icon: String
@@ -87,6 +124,7 @@ struct PaletteItem: Identifiable {
     let tint: Color
     var inputPrompt: String? = nil
     var tier: PaletteLevel = .basic
+    var section: PaletteSection = .builtin
     let run: (String) -> Void
 }
 
@@ -236,12 +274,12 @@ struct CommandPalette: View {
 
     private var scopeItems: [PaletteItem] {
         var result: [PaletteItem] = [
-            PaletteItem(icon: "globe", title: loc("scope.global"), subtitle: loc("projects.scope"), tint: .gray) { _ in
+            PaletteItem(icon: "globe", title: loc("scope.global"), subtitle: loc("projects.scope"), tint: .gray, section: .scopes) { _ in
                 scope.currentProjectID = nil
             }
         ]
         for project in projects {
-            result.append(PaletteItem(icon: "folder", title: "\(project.icon) \(project.name)", subtitle: loc("projects.scope"), tint: Color(hex: project.colorHex)) { _ in
+            result.append(PaletteItem(icon: "folder", title: "\(project.icon) \(project.name)", subtitle: loc("projects.scope"), tint: Color(hex: project.colorHex), section: .scopes) { _ in
                 scope.currentProjectID = project.id
             })
         }
@@ -256,22 +294,23 @@ struct CommandPalette: View {
 
     private var savedItems: [PaletteItem] {
         var result: [PaletteItem] = []
-        for s in ssh where inScope(s.projectID) {
-            result.append(PaletteItem(icon: "network", title: "\(s.icon) \(s.name)", subtitle: "\(s.username)@\(s.host)", tint: .blue) { _ in
-                var cmd = SSHCommandBuilder.command(for: s) + SSHCommandBuilder.startupSuffix(for: s)
-                if s.authType == .password { cmd += "\n" }
-                runInFocused(cmd)
-            })
-        }
+        // Favourite directories first — these are what the user most often wants from the palette.
         for l in locations where inScope(l.projectID) {
-            result.append(PaletteItem(icon: "mappin.and.ellipse", title: "\(l.icon) \(l.name)", subtitle: l.absolutePath, tint: .orange) { _ in
+            result.append(PaletteItem(icon: "mappin.and.ellipse", title: "\(l.icon) \(l.name)", subtitle: l.absolutePath, tint: .orange, section: .favourites) { _ in
                 terminalManager.cd(to: l.absolutePath, in: terminalManager.focusedPanelIndex)
             })
         }
         for c in commands where inScope(c.projectID) {
-            result.append(PaletteItem(icon: "terminal", title: "\(c.icon) \(c.name)", subtitle: c.command, tint: .green) { _ in
+            result.append(PaletteItem(icon: "terminal", title: "\(c.icon) \(c.name)", subtitle: c.command, tint: .green, section: .commands) { _ in
                 let dir = c.workingDirectory.isEmpty ? nil : c.workingDirectory
                 terminalManager.runCommand(c.command, workingDirectory: dir, in: terminalManager.focusedPanelIndex)
+            })
+        }
+        for s in ssh where inScope(s.projectID) {
+            result.append(PaletteItem(icon: "network", title: "\(s.icon) \(s.name)", subtitle: "\(s.username)@\(s.host)", tint: .blue, section: .connections) { _ in
+                var cmd = SSHCommandBuilder.command(for: s) + SSHCommandBuilder.startupSuffix(for: s)
+                if s.authType == .password { cmd += "\n" }
+                runInFocused(cmd)
             })
         }
         return result
@@ -313,11 +352,23 @@ struct CommandPalette: View {
 
     private var filtered: [PaletteItem] {
         let q = model.query.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !q.isEmpty else { return items }
-        return items
-            .compactMap { item in matchScore(item, q).map { (item, $0) } }
-            .sorted { $0.1 > $1.1 }
-            .map { $0.0 }
+        let all = items
+        // Keep sections grouped in priority order (favourites first) so a user's saved items
+        // surface above the built-in catalogue — both at rest and while searching. Within a
+        // section, matches are ranked by relevance.
+        var result: [PaletteItem] = []
+        for section in PaletteSection.allCases {
+            let inSection = all.filter { $0.section == section }
+            if q.isEmpty {
+                result += inSection
+            } else {
+                result += inSection
+                    .compactMap { item in matchScore(item, q).map { (item, $0) } }
+                    .sorted { $0.1 > $1.1 }
+                    .map { $0.0 }
+            }
+        }
+        return result
     }
 
     /// `filtered`, but it also pushes the result into the model so the key monitor reads the
@@ -356,7 +407,10 @@ struct CommandPalette: View {
     }
 
     private var searchView: some View {
-        VStack(spacing: 0) {
+        // Compute the filtered list once per render (it also refreshes `model.visible` for the
+        // key monitor). Reused for both the rows and the section-header lookups below.
+        let rows = visibleItems
+        return VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField(loc("search.placeholder"), text: $model.query)
@@ -384,7 +438,12 @@ struct CommandPalette: View {
                         // every render, so the UUIDs change each time and ForEach would tear
                         // down and rebuild the whole list (breaking the selection highlight and
                         // leaving stale rows after a search). Positional ids stay stable.
-                        ForEach(Array(visibleItems.enumerated()), id: \.offset) { index, item in
+                        ForEach(Array(rows.enumerated()), id: \.offset) { index, item in
+                            // A lightweight header leads each section's first row, so favourite
+                            // directories read as a distinct, prominent group.
+                            if index == 0 || rows[index - 1].section != item.section {
+                                sectionHeader(item.section)
+                            }
                             row(item, active: index == model.selection)
                                 .id(index)
                                 .contentShape(Rectangle())
@@ -401,6 +460,20 @@ struct CommandPalette: View {
         }
         .onAppear { searchFocused = true; model.selection = 0 }
         .onExitCommand { dismiss() }
+    }
+
+    private func sectionHeader(_ section: PaletteSection) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: section.icon).font(.system(size: 9, weight: .semibold))
+            Text(loc(section.titleKey).uppercased())
+                .font(.caption2.weight(.semibold))
+                .tracking(0.6)
+            Spacer()
+        }
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 1)
     }
 
     private func inputView(_ item: PaletteItem) -> some View {

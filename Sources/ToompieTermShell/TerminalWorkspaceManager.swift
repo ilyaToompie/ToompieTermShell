@@ -72,6 +72,11 @@ final class TerminalPanelModel: ObservableObject, Identifiable {
 
 @MainActor
 final class TerminalWorkspaceManager: ObservableObject {
+    /// Single shared workspace so the URL handler (AppKit delegate) and the window (SwiftUI scene)
+    /// drive the same panels — a second instance would mean a second window fighting over the
+    /// terminal NSViews, which renders as empty frames.
+    static let shared = TerminalWorkspaceManager()
+
     @Published var panels: [TerminalPanelModel]
     @Published private(set) var visiblePanelCount: Int
     @Published private(set) var focusedPanelIndex: Int
@@ -79,7 +84,7 @@ final class TerminalWorkspaceManager: ObservableObject {
     private let prefs = AppPreferences.shared
     private var cancellables: Set<AnyCancellable> = []
 
-    init() {
+    private init() {
         self.panels = (0..<4).map { TerminalPanelModel(index: $0) }
         let savedCount = UserDefaults.standard.integer(forKey: "visiblePanelCount")
         self.visiblePanelCount = savedCount == 0 ? 1 : min(max(savedCount, 1), 4)
@@ -120,7 +125,7 @@ final class TerminalWorkspaceManager: ObservableObject {
     }
 
     @discardableResult
-    func createTab(in panelIndex: Int, title: String? = nil, commandToRun: String? = nil) -> TerminalTabModel? {
+    func createTab(in panelIndex: Int, title: String? = nil, commandToRun: String? = nil, workingDirectory: String? = nil) -> TerminalTabModel? {
         guard let panel = panel(panelIndex) else { return nil }
         let tabNumber = panel.tabs.count + 1
         let tab = TerminalTabModel(title: title ?? "Shell \(tabNumber)")
@@ -133,7 +138,13 @@ final class TerminalWorkspaceManager: ObservableObject {
         let shell = prefs.resolvedShell()
         let base = URL(fileURLWithPath: shell).lastPathComponent
         let shellName = prefs.loginShell ? "-" + base : base
-        tab.terminalView.startProcess(executable: shell, execName: shellName, currentDirectory: FileManager.default.homeDirectoryForCurrentUser.path)
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let startDir = workingDirectory.flatMap { dir -> String? in
+            var isDir: ObjCBool = false
+            return FileManager.default.fileExists(atPath: dir, isDirectory: &isDir) && isDir.boolValue ? dir : nil
+        } ?? home
+        if startDir != home { tab.currentDirectory = startDir }
+        tab.terminalView.startProcess(executable: shell, execName: shellName, currentDirectory: startDir)
 
         let startup = prefs.shellStartupCommand.trimmingCharacters(in: .whitespacesAndNewlines)
         if !startup.isEmpty {
@@ -223,6 +234,19 @@ final class TerminalWorkspaceManager: ObservableObject {
 
     func cd(to path: String, in panelIndex: Int) {
         send(ShellSafety.cdCommand(to: path), to: panelIndex)
+    }
+
+    /// Opens a directory in a panel like `code .`: reuse the panel's live shell tab with a `cd`
+    /// (no new tab, no new window); only spin up a tab if the panel has no running shell.
+    func openDirectory(_ path: String, in panelIndex: Int) {
+        guard let panel = panel(panelIndex) else { return }
+        focusPanel(panelIndex)
+        if let tab = panel.selectedTab, tab.kind == .shell, tab.isRunning {
+            cd(to: path, in: panelIndex)
+        } else {
+            let name = (path as NSString).lastPathComponent
+            createTab(in: panelIndex, title: name.isEmpty ? nil : name, workingDirectory: path)
+        }
     }
 
     func runCommand(_ command: String, workingDirectory: String?, in panelIndex: Int) {

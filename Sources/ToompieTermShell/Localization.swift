@@ -231,6 +231,7 @@ extension LocalizationManager {
         "palette.script": "Script name",
         "palette.package": "Package name",
         "palette.port": "Port number",
+        "palette.builtin": "Built-in",
 
         "view.simple": "Simple",
         "view.detailed": "Detailed",
@@ -356,7 +357,27 @@ extension LocalizationManager {
         "settings.bgGrayscale": "Grayscale",
         "settings.bgBlur": "Blur",
         "settings.bgBrightness": "Brightness",
-        "settings.bgDim": "Dim"
+        "settings.bgDim": "Dim",
+
+        "cli.section": "Terminal command",
+        "cli.hint": "Open a folder (or file) in a panel straight from your shell, like “code .”.",
+        "cli.commandName": "Command",
+        "cli.statusInstalled": "Installed",
+        "cli.usage": "%@ <folder> <panel 1–4>   ·   e.g.  %@ . 2",
+        "cli.install": "Install",
+        "cli.installNamed": "Install “%@”",
+        "cli.reinstall": "Reinstall / update",
+        "cli.copyLine": "Copy PATH line",
+        "cli.copied": "PATH line copied",
+        "cli.uninstall": "Remove",
+        "cli.removed": "Command removed",
+        "cli.promptTitle": "Run it from your terminal",
+        "cli.promptBody": "Install the %@ command, then “%@ . 2” opens this folder in panel 2.",
+        "cli.installed": "“%@” is ready — try it in a new shell",
+        "cli.installedManual": "Added to PATH — open a new terminal",
+        "cli.installFailed": "Couldn’t write the command",
+        "cli.later": "Later",
+        "cli.notFound": "Not found: %@"
     ]
 
     private static let ru: [String: String] = [
@@ -510,6 +531,7 @@ extension LocalizationManager {
         "palette.script": "Имя скрипта",
         "palette.package": "Имя пакета",
         "palette.port": "Номер порта",
+        "palette.builtin": "Встроенные",
 
         "view.simple": "Просто",
         "view.detailed": "Подробно",
@@ -635,7 +657,27 @@ extension LocalizationManager {
         "settings.bgGrayscale": "Чёрно-белый",
         "settings.bgBlur": "Размытие",
         "settings.bgBrightness": "Яркость",
-        "settings.bgDim": "Затемнение"
+        "settings.bgDim": "Затемнение",
+
+        "cli.section": "Команда терминала",
+        "cli.hint": "Открывай папку (или файл) в панели прямо из шелла, как «code .».",
+        "cli.commandName": "Команда",
+        "cli.statusInstalled": "Установлено",
+        "cli.usage": "%@ <папка> <панель 1–4>   ·   напр.  %@ . 2",
+        "cli.install": "Установить",
+        "cli.installNamed": "Установить «%@»",
+        "cli.reinstall": "Переустановить / обновить",
+        "cli.copyLine": "Скопировать строку PATH",
+        "cli.copied": "Строка PATH скопирована",
+        "cli.uninstall": "Удалить",
+        "cli.removed": "Команда удалена",
+        "cli.promptTitle": "Запускай из терминала",
+        "cli.promptBody": "Установи команду %@, и «%@ . 2» откроет эту папку в панели 2.",
+        "cli.installed": "«%@» готова — попробуй в новом шелле",
+        "cli.installedManual": "Добавлено в PATH — открой новый терминал",
+        "cli.installFailed": "Не удалось записать команду",
+        "cli.later": "Позже",
+        "cli.notFound": "Не найдено: %@"
     ]
 
     private static let zh: [String: String] = [
@@ -789,6 +831,7 @@ extension LocalizationManager {
         "palette.script": "脚本名称",
         "palette.package": "包名称",
         "palette.port": "端口号",
+        "palette.builtin": "内置",
 
         "view.simple": "简洁",
         "view.detailed": "详细",
@@ -914,6 +957,26 @@ extension LocalizationManager {
         "settings.bgGrayscale": "灰度",
         "settings.bgBlur": "模糊",
         "settings.bgBrightness": "亮度",
-        "settings.bgDim": "变暗"
+        "settings.bgDim": "变暗",
+
+        "cli.section": "终端命令",
+        "cli.hint": "像 “code .” 一样，直接从 shell 在面板中打开文件夹（或文件）。",
+        "cli.commandName": "命令",
+        "cli.statusInstalled": "已安装",
+        "cli.usage": "%@ <文件夹> <面板 1–4>   ·   例如  %@ . 2",
+        "cli.install": "安装",
+        "cli.installNamed": "安装 “%@”",
+        "cli.reinstall": "重新安装 / 更新",
+        "cli.copyLine": "复制 PATH 行",
+        "cli.copied": "已复制 PATH 行",
+        "cli.uninstall": "移除",
+        "cli.removed": "已移除命令",
+        "cli.promptTitle": "从终端运行",
+        "cli.promptBody": "安装 %@ 命令，然后 “%@ . 2” 会在面板 2 打开此文件夹。",
+        "cli.installed": "“%@” 已就绪 — 在新 shell 中试试",
+        "cli.installedManual": "已加入 PATH — 请打开新终端",
+        "cli.installFailed": "无法写入命令",
+        "cli.later": "稍后",
+        "cli.notFound": "未找到：%@"
     ]
 }

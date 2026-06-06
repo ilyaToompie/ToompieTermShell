@@ -2,9 +2,30 @@ import AppKit
 import SwiftData
 import SwiftUI
 
+/// Handles `toompieterm://` URLs at the AppKit level. Routing here (instead of SwiftUI's
+/// `.onOpenURL`) keeps URL handling out of the scene system. The main scene is a single
+/// `Window` (not a `WindowGroup`) so the open/reopen event can never spawn a *second* window
+/// that fights over the shared terminal NSViews and leaves one rendered as an empty frame.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func application(_ application: NSApplication, open urls: [URL]) {
+        MainActor.assumeIsolated {
+            for url in urls {
+                CLILauncher.shared.handle(url, manager: .shared)
+            }
+        }
+    }
+
+    /// Single-window app: closing the one window quits, rather than leaving a headless process
+    /// with no way to bring the `Window` back.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        true
+    }
+}
+
 @main
 struct ToompieTermShellApp: App {
-    @StateObject private var terminalManager = TerminalWorkspaceManager()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @StateObject private var terminalManager = TerminalWorkspaceManager.shared
     @StateObject private var preferences = AppPreferences.shared
     @StateObject private var localization = LocalizationManager.shared
     @StateObject private var fontLibrary = FontLibrary.shared
@@ -46,7 +67,9 @@ struct ToompieTermShellApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        // Single, non-duplicable window. A `WindowGroup` is a template that the system can
+        // instantiate again on an open/reopen/URL event — which spawned the blank second window.
+        Window("ToompieTermShell", id: "main") {
             ContentView()
                 .environmentObject(terminalManager)
                 .environmentObject(preferences)

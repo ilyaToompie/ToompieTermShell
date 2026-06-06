@@ -8,7 +8,9 @@ struct SettingsTab: View {
     @EnvironmentObject private var fonts: FontLibrary
     @EnvironmentObject private var gifs: GifLibrary
     @EnvironmentObject private var gifInstances: GifInstanceStore
+    @StateObject private var cli = CLILauncher.shared
     @State private var gifURLField = ""
+    @State private var cliNameField = ""
 
     var body: some View {
         ScrollView {
@@ -16,6 +18,7 @@ struct SettingsTab: View {
                 languageCard
                 presetsCard
                 interfaceCard
+                cliCard
                 gifCard
                 appearanceCard
                 fontCard
@@ -24,6 +27,75 @@ struct SettingsTab: View {
             }
             .padding(18)
         }
+        .onAppear { if cliNameField.isEmpty { cliNameField = cli.commandName } }
+    }
+
+    private var cliCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader("cli.section", "terminal")
+            Text(loc("cli.hint")).font(.caption).foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                Text(loc("cli.commandName")).font(.callout.weight(.medium))
+                TextField("tt", text: $cliNameField)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 140)
+                    .onSubmit { applyCLIName() }
+                Spacer()
+                if cli.installed {
+                    Label(loc("cli.statusInstalled"), systemImage: "checkmark.circle.fill")
+                        .font(.caption).foregroundStyle(.green).labelStyle(.titleAndIcon)
+                }
+            }
+
+            Text(String(format: loc("cli.usage"), cli.commandName, cli.commandName))
+                .font(.caption2.monospaced())
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            HStack(spacing: 8) {
+                Button {
+                    applyCLIName()
+                    switch cli.install() {
+                    case .linked:
+                        ToastCenter.shared.show(String(format: loc("cli.installed"), cli.commandName), icon: "checkmark.seal.fill")
+                    case .pathEdited:
+                        ToastCenter.shared.show(loc("cli.installedManual"), icon: "checkmark.seal.fill")
+                    case .failed:
+                        ToastCenter.shared.show(loc("cli.installFailed"), icon: "exclamationmark.triangle.fill", tint: .red)
+                    }
+                } label: {
+                    Label(cli.installed ? loc("cli.reinstall") : loc("cli.install"), systemImage: "arrow.down.circle.fill")
+                }
+                .buttonStyle(.borderedProminent)
+
+                Button {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(cli.manualPathLine, forType: .string)
+                    ToastCenter.shared.key("cli.copied", icon: "doc.on.doc.fill")
+                } label: {
+                    Label(loc("cli.copyLine"), systemImage: "doc.on.doc")
+                }
+                .buttonStyle(.bordered)
+
+                if cli.installed {
+                    Button(role: .destructive) {
+                        cli.uninstall()
+                        ToastCenter.shared.key("cli.removed", icon: "trash.fill", tint: .orange)
+                    } label: {
+                        Label(loc("cli.uninstall"), systemImage: "trash")
+                    }
+                    .buttonStyle(.bordered)
+                }
+            }
+        }
+        .padding(14)
+        .glass()
+    }
+
+    private func applyCLIName() {
+        cli.setCommandName(cliNameField)
+        cliNameField = cli.commandName
     }
 
     private var presetsCard: some View {

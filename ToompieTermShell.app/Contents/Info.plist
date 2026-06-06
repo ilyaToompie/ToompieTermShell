@@ -19,10 +19,23 @@
   <string>1</string>
   <key>CFBundleIconFile</key>
   <string>AppIcon</string>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>com.toompie.termshell.open</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>toompieterm</string>
+      </array>
+    </dict>
+  </array>
   <key>LSMinimumSystemVersion</key>
   <string>14.0</string>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <key>NSQuitAlwaysKeepsWindows</key>
+  <false/>
   <key>NSDocumentsFolderUsageDescription</key>
   <string>ToompieTermShell needs access to your Documents to open and edit files and configs.</string>
   <key>NSDesktopFolderUsageDescription</key>
