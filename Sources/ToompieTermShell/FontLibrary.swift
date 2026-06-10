@@ -36,7 +36,23 @@ final class FontLibrary: ObservableObject {
         GoogleFontEntry(family: "Red Hat Mono", fileName: "RedHatMono.ttf", urlPath: "ofl/redhatmono/RedHatMono%5Bwght%5D.ttf"),
         GoogleFontEntry(family: "Spline Sans Mono", fileName: "SplineSansMono.ttf", urlPath: "ofl/splinesansmono/SplineSansMono%5Bwght%5D.ttf"),
         GoogleFontEntry(family: "Noto Sans Mono", fileName: "NotoSansMono.ttf", urlPath: "ofl/notosansmono/NotoSansMono%5Bwdth,wght%5D.ttf"),
-        GoogleFontEntry(family: "Fragment Mono", fileName: "FragmentMono-Regular.ttf", urlPath: "ofl/fragmentmono/FragmentMono-Regular.ttf")
+        GoogleFontEntry(family: "Fragment Mono", fileName: "FragmentMono-Regular.ttf", urlPath: "ofl/fragmentmono/FragmentMono-Regular.ttf"),
+        GoogleFontEntry(family: "Fira Mono", fileName: "FiraMono-Regular.ttf", urlPath: "ofl/firamono/FiraMono-Regular.ttf"),
+        GoogleFontEntry(family: "DM Mono", fileName: "DMMono-Regular.ttf", urlPath: "ofl/dmmono/DMMono-Regular.ttf"),
+        GoogleFontEntry(family: "Azeret Mono", fileName: "AzeretMono.ttf", urlPath: "ofl/azeretmono/AzeretMono%5Bwght%5D.ttf"),
+        GoogleFontEntry(family: "Martian Mono", fileName: "MartianMono.ttf", urlPath: "ofl/martianmono/MartianMono%5Bwdth,wght%5D.ttf"),
+        GoogleFontEntry(family: "B612 Mono", fileName: "B612Mono-Regular.ttf", urlPath: "ofl/b612mono/B612Mono-Regular.ttf"),
+        GoogleFontEntry(family: "Geist Mono", fileName: "GeistMono.ttf", urlPath: "ofl/geistmono/GeistMono%5Bwght%5D.ttf"),
+        GoogleFontEntry(family: "Victor Mono", fileName: "VictorMono.ttf", urlPath: "ofl/victormono/VictorMono%5Bwght%5D.ttf"),
+        GoogleFontEntry(family: "Chivo Mono", fileName: "ChivoMono.ttf", urlPath: "ofl/chivomono/ChivoMono%5Bwght%5D.ttf"),
+        GoogleFontEntry(family: "Reddit Mono", fileName: "RedditMono.ttf", urlPath: "ofl/redditmono/RedditMono%5Bwght%5D.ttf"),
+        GoogleFontEntry(family: "Oxygen Mono", fileName: "OxygenMono-Regular.ttf", urlPath: "ofl/oxygenmono/OxygenMono-Regular.ttf"),
+        GoogleFontEntry(family: "Share Tech Mono", fileName: "ShareTechMono-Regular.ttf", urlPath: "ofl/sharetechmono/ShareTechMono-Regular.ttf"),
+        GoogleFontEntry(family: "Cutive Mono", fileName: "CutiveMono-Regular.ttf", urlPath: "ofl/cutivemono/CutiveMono-Regular.ttf"),
+        GoogleFontEntry(family: "Xanh Mono", fileName: "XanhMono-Regular.ttf", urlPath: "ofl/xanhmono/XanhMono-Regular.ttf"),
+        GoogleFontEntry(family: "Syne Mono", fileName: "SyneMono-Regular.ttf", urlPath: "ofl/synemono/SyneMono-Regular.ttf"),
+        GoogleFontEntry(family: "VT323", fileName: "VT323-Regular.ttf", urlPath: "ofl/vt323/VT323-Regular.ttf"),
+        GoogleFontEntry(family: "Major Mono Display", fileName: "MajorMonoDisplay-Regular.ttf", urlPath: "ofl/majormonodisplay/MajorMonoDisplay-Regular.ttf")
     ]
 
     private var registeredURLs: [String: URL] = [:]

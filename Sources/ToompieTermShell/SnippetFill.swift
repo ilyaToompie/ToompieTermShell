@@ -50,7 +50,7 @@ struct SnippetFillSheet: View {
                     Picker("", selection: $serverID) {
                         Text("—").tag(UUID?.none)
                         ForEach(servers) { server in
-                            Text("\(server.icon) \(server.name)").tag(UUID?.some(server.id))
+                            Text(IconRef.labelTitle(server.icon, server.name)).tag(UUID?.some(server.id))
                         }
                     }
                     .labelsHidden()

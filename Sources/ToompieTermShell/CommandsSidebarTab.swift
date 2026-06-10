@@ -67,7 +67,7 @@ struct CommandsSidebarTab: View {
 
     private func simpleRow(_ command: CommandShortcut) -> some View {
         HStack(spacing: 8) {
-            Text(command.icon).font(.callout)
+            IconView(command.icon, size: 18)
             Text(command.name).font(.subheadline.weight(.medium)).lineLimit(1)
             Spacer(minLength: 4)
             TerminalTargetMenu(title: loc("common.run"), systemImage: "play.fill") { run(command, in: $0) }
@@ -84,7 +84,7 @@ struct CommandsSidebarTab: View {
     private func detailedRow(_ command: CommandShortcut) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text(command.icon)
+                IconView(command.icon, size: 18)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(command.name).font(.subheadline.weight(.semibold)).lineLimit(1)
                     if !command.commandDescription.isEmpty {
@@ -166,7 +166,7 @@ struct CommandShortcutEditor: View {
                 .font(.title3.weight(.semibold))
 
             VStack(alignment: .leading, spacing: 12) {
-                EditorRow(loc("ssh.icon")) { EmojiField(text: $icon) }
+                EditorRow(loc("ssh.icon")) { IconPicker(icon: $icon) }
                 EditorRow(loc("common.name")) { EditorTextField(title: loc("common.name"), text: $name) }
                 EditorRow(loc("commands.command")) {
                     TextField(loc("commands.command"), text: $commandText, axis: .vertical)

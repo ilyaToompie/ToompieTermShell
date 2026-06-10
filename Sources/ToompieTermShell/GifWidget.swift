@@ -3,6 +3,7 @@ import SwiftUI
 struct GifWidget: View {
     @Binding var instance: GifInstance
     let editable: Bool
+    @ObservedObject private var motion = MotionController.shared
     @State private var dragStart: CGSize?
     @State private var sizeStart: Double?
 
@@ -19,15 +20,26 @@ struct GifWidget: View {
     }
 
     private func handleTap() {
-        guard let level = instance.tapAction.paletteLevel, !editable else { return }
-        PaletteController.shared.present(level)
+        guard !editable else { return }
+        switch instance.tapAction {
+        case .none:
+            break
+        case .paletteBasic, .paletteAdvanced, .paletteSuper:
+            if let level = instance.tapAction.paletteLevel {
+                PaletteController.shared.present(level)
+            }
+        case .hideUI:
+            UIChrome.shared.toggleHidden()
+        case .randomTheme:
+            AppPreferences.shared.randomizeTheme()
+        }
     }
 
     private var content: some View {
         let radius = instance.showBox ? instance.cornerRadius : 0
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
         return ZStack(alignment: .bottomTrailing) {
-            AnimatedAssetView(path: instance.path, fit: instance.fit)
+            AnimatedAssetView(path: instance.path, fit: instance.fit, playing: motion.animate)
                 .scaleEffect(instance.innerScale)
                 .scaleEffect(x: instance.flip ? -1 : 1, y: 1)
                 .rotationEffect(.degrees(instance.rotation))

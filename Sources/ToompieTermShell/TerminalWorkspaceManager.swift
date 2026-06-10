@@ -93,7 +93,10 @@ final class TerminalWorkspaceManager: ObservableObject {
 
         prefs.$revision
             .dropFirst()
-            .receive(on: RunLoop.main)
+            // Slider drags (opacity, font size, blur…) fire `revision` dozens of
+            // times a second; re-applying font/colour to every terminal on each
+            // tick stutters the UI. Coalesce to the latest value ~12×/sec.
+            .throttle(for: .milliseconds(80), scheduler: RunLoop.main, latest: true)
             .sink { [weak self] _ in
                 self?.applyAppearanceToAll()
             }
@@ -216,9 +219,13 @@ final class TerminalWorkspaceManager: ObservableObject {
         focusPanel(panelIndex)
     }
 
-    func send(_ text: String, to panelIndex: Int? = nil) {
+    func send(_ text: String, to panelIndex: Int? = nil, clearLine: Bool = false) {
         let index = panelIndex ?? focusedPanelIndex
         guard let tab = activeTabCreatingIfNeeded(in: index) else { return }
+        if clearLine {
+            let reset = Array(ShellSafety.lineReset.utf8)
+            tab.terminalView.send(source: tab.terminalView, data: reset[...])
+        }
         let data = Array(text.utf8)
         tab.terminalView.send(source: tab.terminalView, data: data[...])
         focusPanel(index)
@@ -232,8 +239,8 @@ final class TerminalWorkspaceManager: ObservableObject {
         focusPanel(index)
     }
 
-    func cd(to path: String, in panelIndex: Int) {
-        send(ShellSafety.cdCommand(to: path), to: panelIndex)
+    func cd(to path: String, in panelIndex: Int, clearLine: Bool = false) {
+        send(ShellSafety.cdCommand(to: path), to: panelIndex, clearLine: clearLine)
     }
 
     /// Opens a directory in a panel like `code .`: reuse the panel's live shell tab with a `cd`
@@ -249,11 +256,15 @@ final class TerminalWorkspaceManager: ObservableObject {
         }
     }
 
-    func runCommand(_ command: String, workingDirectory: String?, in panelIndex: Int) {
+    func runCommand(_ command: String, workingDirectory: String?, in panelIndex: Int, clearLine: Bool = false) {
         if let workingDirectory, !workingDirectory.isEmpty {
-            send(ShellSafety.cdCommand(to: workingDirectory), to: panelIndex)
+            // Reset the line before the `cd`; the command that follows lands on a
+            // fresh prompt, so it doesn't need to clear again.
+            send(ShellSafety.cdCommand(to: workingDirectory), to: panelIndex, clearLine: clearLine)
+            send(ShellSafety.commandLine(command), to: panelIndex)
+        } else {
+            send(ShellSafety.commandLine(command), to: panelIndex, clearLine: clearLine)
         }
-        send(ShellSafety.commandLine(command), to: panelIndex)
     }
 
     func activePanelIndices() -> [Int] {

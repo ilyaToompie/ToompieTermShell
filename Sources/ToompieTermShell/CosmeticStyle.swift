@@ -29,35 +29,63 @@ struct PulsingDot: View {
     let color: Color
     let active: Bool
     @State private var pulse = false
+    @ObservedObject private var motion = MotionController.shared
+    @ObservedObject private var prefs = AppPreferences.shared
+
+    /// The forever-repeating pulse only runs when the dot is active, the window is
+    /// on screen, and the user hasn't asked to reduce motion — otherwise it's a
+    /// plain static dot, so closed/background windows aren't animating off-screen.
+    private var animating: Bool { active && motion.animate && !prefs.reduceMotion }
 
     var body: some View {
         Circle()
             .fill(active ? color : Color.gray)
             .frame(width: 7, height: 7)
-            .scaleEffect(active && pulse ? 1.4 : 1.0)
+            .scaleEffect(animating && pulse ? 1.4 : 1.0)
             .shadow(color: active ? color.opacity(0.9) : .clear, radius: active ? 4 : 0)
-            .animation(active ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true) : .default, value: pulse)
-            .onAppear { pulse = true }
+            .animation(animating ? .easeInOut(duration: 0.9).repeatForever(autoreverses: true) : .default, value: pulse)
+            .onAppear { pulse = animating }
+            .onChange(of: animating) { _, now in
+                // Re-key the perpetual pulse so it genuinely resumes when motion
+                // returns (reduce-motion turned off, window revealed). A one-shot
+                // `pulse` set once in onAppear would otherwise stay frozen forever.
+                pulse = false
+                if now { DispatchQueue.main.async { pulse = true } }
+            }
     }
 }
 
 struct DecorBlobs: View {
     let accent: Color
     var parallax: CGSize = .zero
+    @ObservedObject private var motion = MotionController.shared
+    @ObservedObject private var prefs = AppPreferences.shared
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-            ZStack {
-                blob(accent, t: t, phase: 0, radius: 260, depth: 1.0)
-                blob(.blue, t: t, phase: 2.1, radius: 220, depth: 1.6)
-                blob(.purple, t: t, phase: 4.2, radius: 240, depth: 0.7)
-                blob(.teal, t: t, phase: 1.1, radius: 180, depth: 2.0)
+        Group {
+            // 20 fps (down from 30) is plenty for a slow, heavily-blurred drift and
+            // cuts this constantly-running blur recomposite — the heaviest idle
+            // cost — by a third. Reduce-motion / hidden windows freeze it entirely.
+            if motion.animate && !prefs.reduceMotion {
+                TimelineView(.animation(minimumInterval: 1.0 / 20.0)) { context in
+                    blobs(t: context.date.timeIntervalSinceReferenceDate)
+                }
+            } else {
+                blobs(t: 0)
             }
-            .blur(radius: 70)
-            .opacity(0.30)
         }
         .allowsHitTesting(false)
+    }
+
+    private func blobs(t: Double) -> some View {
+        ZStack {
+            blob(accent, t: t, phase: 0, radius: 260, depth: 1.0)
+            blob(.blue, t: t, phase: 2.1, radius: 220, depth: 1.6)
+            blob(.purple, t: t, phase: 4.2, radius: 240, depth: 0.7)
+            blob(.teal, t: t, phase: 1.1, radius: 180, depth: 2.0)
+        }
+        .blur(radius: 70)
+        .opacity(0.30)
     }
 
     private func blob(_ color: Color, t: Double, phase: Double, radius: CGFloat, depth: CGFloat) -> some View {
@@ -92,26 +120,37 @@ struct AnimatedBorder: ViewModifier {
     let active: Bool
     let cornerRadius: CGFloat
     let color: Color
+    @ObservedObject private var motion = MotionController.shared
+    @ObservedObject private var prefs = AppPreferences.shared
 
     func body(content: Content) -> some View {
         content.overlay {
             let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             if active {
-                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { ctx in
-                    let angle = Angle.degrees((ctx.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3) / 3) * 360)
-                    shape.strokeBorder(
-                        AngularGradient(
-                            gradient: Gradient(colors: [color, color.opacity(0.2), color.opacity(0.7), color.opacity(0.2), color]),
-                            center: .center,
-                            angle: angle
-                        ),
-                        lineWidth: 2
-                    )
+                // Rotating focus halo: 20 fps and frozen under reduce-motion / when
+                // the window is hidden. A static tinted border still marks focus.
+                if motion.animate && !prefs.reduceMotion {
+                    TimelineView(.animation(minimumInterval: 1.0 / 20.0)) { ctx in
+                        border(shape, angle: Angle.degrees((ctx.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3) / 3) * 360))
+                    }
+                } else {
+                    border(shape, angle: .degrees(0))
                 }
             } else {
                 shape.strokeBorder(Color.white.opacity(0.14), lineWidth: 1)
             }
         }
+    }
+
+    private func border(_ shape: RoundedRectangle, angle: Angle) -> some View {
+        shape.strokeBorder(
+            AngularGradient(
+                gradient: Gradient(colors: [color, color.opacity(0.2), color.opacity(0.7), color.opacity(0.2), color]),
+                center: .center,
+                angle: angle
+            ),
+            lineWidth: 2
+        )
     }
 }
 

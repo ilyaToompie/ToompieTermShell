@@ -3,15 +3,21 @@ import SwiftUI
 
 struct WeatherOverlay: NSViewRepresentable {
     let effects: [WeatherEffect]
+    var tints: [String: String] = [:]
+    /// When false, the particle emitters are frozen (render server stops
+    /// simulating cells) — used to pause them while the window is hidden.
+    var running: Bool = true
 
     func makeNSView(context: Context) -> WeatherEffectView {
         let view = WeatherEffectView()
-        view.apply(effects)
+        view.apply(effects, tints: tints)
+        view.setRunning(running)
         return view
     }
 
     func updateNSView(_ nsView: WeatherEffectView, context: Context) {
-        nsView.apply(effects)
+        nsView.apply(effects, tints: tints)
+        nsView.setRunning(running)
     }
 }
 
@@ -53,20 +59,61 @@ private struct EffectSpec {
 
 final class WeatherEffectView: NSView {
     private var current: Set<WeatherEffect> = []
+    private var currentTints: [String: String] = [:]
+    private var running = true
 
     override var isFlipped: Bool { false }
 
-    func apply(_ effects: [WeatherEffect]) {
+    /// Never participate in hit-testing: this full-window NSView overlay must
+    /// never swallow clicks/drags meant for the SwiftUI UI underneath it.
+    /// (SwiftUI's `.allowsHitTesting(false)` does not stop the hosted AppKit
+    /// view from intercepting events — this does.)
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    func apply(_ effects: [WeatherEffect], tints: [String: String] = [:]) {
         let incoming = Set(effects).subtracting([.off])
-        guard current != incoming else { return }
+        guard current != incoming || currentTints != tints else { return }
         current = incoming
+        currentTints = tints
         wantsLayer = true
         layer?.sublayers?.removeAll()
         for effect in incoming {
-            let emitter = makeEmitter(effect)
+            let emitter = makeEmitter(effect, tint: tintColor(for: effect))
             emitter.name = effect.rawValue
             layer?.addSublayer(emitter)
             layoutEmitter(emitter, effect: effect)
+        }
+        applyRunningState()
+    }
+
+    private func tintColor(for effect: WeatherEffect) -> NSColor? {
+        guard effect.tintable, let hex = currentTints[effect.rawValue] else { return nil }
+        return NSColor(hex: hex)
+    }
+
+    /// Freezes or resumes the CAEmitterLayer simulation. Core Animation keeps
+    /// spawning/animating particles on the render server independent of SwiftUI,
+    /// so without this the emitters burn CPU even when the window is hidden.
+    func setRunning(_ value: Bool) {
+        running = value
+        applyRunningState()
+    }
+
+    private func applyRunningState() {
+        for sub in (layer?.sublayers ?? []) {
+            if running {
+                if sub.speed == 0 {
+                    let pausedAt = sub.timeOffset
+                    sub.speed = 1
+                    sub.timeOffset = 0
+                    sub.beginTime = 0
+                    sub.beginTime = sub.convertTime(CACurrentMediaTime(), from: nil) - pausedAt
+                }
+            } else if sub.speed != 0 {
+                let pausedAt = sub.convertTime(CACurrentMediaTime(), from: nil)
+                sub.speed = 0
+                sub.timeOffset = pausedAt
+            }
         }
     }
 
@@ -98,30 +145,31 @@ final class WeatherEffectView: NSView {
         }
     }
 
-    private func makeEmitter(_ effect: WeatherEffect) -> CAEmitterLayer {
+    private func makeEmitter(_ effect: WeatherEffect, tint: NSColor?) -> CAEmitterLayer {
         let spec = Self.spec(for: effect)
         let emitter = CAEmitterLayer()
-        let additive: Set<WeatherEffect> = [.embers, .fireflies, .stars, .sparkles, .bokeh, .dust, .meteors, .lanterns, .glitter, .aurora, .fireworks, .plasma]
+        let additive: Set<WeatherEffect> = [.embers, .fireflies, .stars, .sparkles, .bokeh, .dust, .meteors, .lanterns, .glitter, .aurora, .fireworks, .cinders]
         emitter.renderMode = additive.contains(effect) ? .additive : .unordered
         emitter.beginTime = CACurrentMediaTime()
         if effect == .rain {
             emitter.emitterCells = Self.rainCells()
             return emitter
         }
+        let colors = tint.map { [$0] } ?? spec.colors
         var cells: [CAEmitterCell] = []
         for kind in spec.kinds {
-            for color in spec.colors {
-                cells.append(Self.cell(spec: spec, kind: kind, color: color))
+            for color in colors {
+                cells.append(Self.cell(spec: spec, kind: kind, color: color, colorCount: colors.count))
             }
         }
         emitter.emitterCells = cells
         return emitter
     }
 
-    private static func cell(spec: EffectSpec, kind: ParticleKind, color: NSColor) -> CAEmitterCell {
+    private static func cell(spec: EffectSpec, kind: ParticleKind, color: NSColor, colorCount: Int) -> CAEmitterCell {
         let cell = CAEmitterCell()
         cell.contents = particleImage(kind: kind, color: color, size: spec.baseSize)
-        cell.birthRate = spec.birthRate / Float(max(spec.colors.count * spec.kinds.count, 1))
+        cell.birthRate = spec.birthRate / Float(max(colorCount * spec.kinds.count, 1))
         cell.lifetime = spec.lifetime
         cell.lifetimeRange = spec.lifetime * 0.3
         cell.velocity = spec.velocity
@@ -186,24 +234,16 @@ final class WeatherEffectView: NSView {
             return EffectSpec(kinds: [.dot, .star], colors: [NSColor(calibratedRed: 1, green: 0.3, blue: 0.4, alpha: 1), NSColor(calibratedRed: 1, green: 0.85, blue: 0.3, alpha: 1), NSColor(calibratedRed: 0.4, green: 0.7, blue: 1, alpha: 1), NSColor(calibratedRed: 0.6, green: 1, blue: 0.5, alpha: 1), NSColor(calibratedRed: 1, green: 0.5, blue: 0.9, alpha: 1)], birthRate: 34, lifetime: 1.7, velocity: 120, velocityRange: 80, yAcceleration: -90, xAcceleration: 0, emissionLongitude: 0, emissionRange: .pi * 2, scale: 0.16, scaleRange: 0.12, scaleSpeed: -0.05, spin: 1.0, spinRange: 1.5, alphaSpeed: -0.5, origin: .area, baseSize: 12)
         case .smoke:
             return EffectSpec(kinds: [.dot], colors: [NSColor(calibratedWhite: 0.55, alpha: 0.18), NSColor(calibratedWhite: 0.42, alpha: 0.15)], birthRate: 6, lifetime: 12, velocity: 40, velocityRange: 18, yAcceleration: 10, xAcceleration: 7, emissionLongitude: .pi / 2, emissionRange: 0.5, scale: 1.1, scaleRange: 0.6, scaleSpeed: 0.13, alphaSpeed: -0.02, origin: .bottom, baseSize: 52)
-        case .plasma:
-            return EffectSpec(kinds: [.dot], colors: [NSColor(calibratedRed: 1, green: 0.3, blue: 0.8, alpha: 0.4), NSColor(calibratedRed: 0.3, green: 0.9, blue: 1, alpha: 0.4), NSColor(calibratedRed: 0.6, green: 0.4, blue: 1, alpha: 0.4)], birthRate: 7, lifetime: 10, velocity: 12, velocityRange: 14, yAcceleration: 0, xAcceleration: 0, emissionLongitude: 0, emissionRange: .pi * 2, scale: 1.4, scaleRange: 1.0, scaleSpeed: 0.04, alphaSpeed: -0.05, origin: .area, baseSize: 46)
         case .ripples:
             return EffectSpec(kinds: [.ring], colors: [NSColor(calibratedRed: 0.6, green: 0.85, blue: 1, alpha: 0.7), NSColor(calibratedWhite: 1, alpha: 0.6)], birthRate: 8, lifetime: 4, velocity: 0, velocityRange: 4, yAcceleration: 0, xAcceleration: 0, emissionLongitude: 0, emissionRange: .pi * 2, scale: 0.1, scaleRange: 0.05, scaleSpeed: 0.9, alphaSpeed: -0.25, origin: .area, baseSize: 60)
         case .rainbow:
             return EffectSpec(kinds: [.dot], colors: [NSColor(calibratedRed: 1, green: 0.32, blue: 0.32, alpha: 1), NSColor(calibratedRed: 1, green: 0.62, blue: 0.25, alpha: 1), NSColor(calibratedRed: 1, green: 0.9, blue: 0.3, alpha: 1), NSColor(calibratedRed: 0.35, green: 0.85, blue: 0.4, alpha: 1), NSColor(calibratedRed: 0.3, green: 0.6, blue: 1, alpha: 1), NSColor(calibratedRed: 0.6, green: 0.4, blue: 1, alpha: 1)], birthRate: 30, lifetime: 10, velocity: 45, velocityRange: 20, yAcceleration: -30, xAcceleration: 8, emissionLongitude: .pi, emissionRange: 0.6, scale: 0.4, scaleRange: 0.25, spin: 0.4, spinRange: 0.8, alphaSpeed: -0.04, origin: .top, baseSize: 14)
-        case .notes:
-            return EffectSpec(kinds: [.glyph("♪"), .glyph("♫"), .glyph("♬"), .glyph("♩")], colors: [NSColor(calibratedRed: 1, green: 0.5, blue: 0.8, alpha: 1), NSColor(calibratedRed: 0.6, green: 0.5, blue: 1, alpha: 1), NSColor(calibratedRed: 0.4, green: 0.8, blue: 1, alpha: 1)], birthRate: 10, lifetime: 9, velocity: 50, velocityRange: 22, yAcceleration: 18, xAcceleration: 16, emissionLongitude: .pi / 2, emissionRange: 0.5, scale: 0.85, scaleRange: 0.3, spin: 0.3, spinRange: 0.8, alphaSpeed: -0.05, origin: .bottom, baseSize: 20)
-        case .bats:
-            return EffectSpec(kinds: [.glyph("🦇")], colors: [.white], birthRate: 8, lifetime: 9, velocity: 60, velocityRange: 30, yAcceleration: -30, xAcceleration: 30, emissionLongitude: .pi, emissionRange: 0.9, scale: 0.9, scaleRange: 0.3, spin: 0.3, spinRange: 1.2, origin: .top, baseSize: 26)
-        case .ghosts:
-            return EffectSpec(kinds: [.glyph("👻")], colors: [.white], birthRate: 7, lifetime: 11, velocity: 38, velocityRange: 18, yAcceleration: 14, xAcceleration: 12, emissionLongitude: .pi / 2, emissionRange: 0.4, scale: 0.9, scaleRange: 0.25, spin: 0.2, spinRange: 0.6, alphaSpeed: -0.05, origin: .bottom, baseSize: 26)
-        case .pumpkins:
-            return EffectSpec(kinds: [.glyph("🎃")], colors: [.white], birthRate: 8, lifetime: 11, velocity: 55, velocityRange: 25, yAcceleration: -50, xAcceleration: 8, emissionLongitude: .pi, emissionRange: 0.5, scale: 0.95, scaleRange: 0.25, spin: 1.0, spinRange: 1.6, origin: .top, baseSize: 26)
-        case .balloons:
-            return EffectSpec(kinds: [.glyph("🎈")], colors: [.white], birthRate: 7, lifetime: 13, velocity: 42, velocityRange: 18, yAcceleration: 16, xAcceleration: 8, emissionLongitude: .pi / 2, emissionRange: 0.35, scale: 1.0, scaleRange: 0.25, spin: 0.2, spinRange: 0.6, alphaSpeed: -0.03, origin: .bottom, baseSize: 28)
-        case .coins:
-            return EffectSpec(kinds: [.glyph("🪙"), .glyph("💰")], colors: [.white], birthRate: 14, lifetime: 8, velocity: 70, velocityRange: 30, yAcceleration: -90, xAcceleration: 6, emissionLongitude: .pi, emissionRange: 0.4, scale: 0.85, scaleRange: 0.25, spin: 2.0, spinRange: 3.0, origin: .top, baseSize: 24)
+        case .snowstorm:
+            return EffectSpec(kinds: [.dot, .snowflake], colors: [.white, NSColor(calibratedWhite: 0.9, alpha: 1)], birthRate: 70, lifetime: 12, velocity: 120, velocityRange: 50, yAcceleration: -60, xAcceleration: 40, emissionLongitude: .pi, emissionRange: 0.7, scale: 0.4, scaleRange: 0.3, spin: 0.8, spinRange: 1.4, alphaSpeed: -0.02, origin: .top, baseSize: 12)
+        case .blossoms:
+            return EffectSpec(kinds: [.leaf], colors: [NSColor(calibratedRed: 1, green: 0.75, blue: 0.85, alpha: 1), NSColor(calibratedRed: 1, green: 0.6, blue: 0.78, alpha: 1), NSColor(calibratedRed: 1, green: 0.85, blue: 0.9, alpha: 1)], birthRate: 16, lifetime: 13, velocity: 42, velocityRange: 22, yAcceleration: -30, xAcceleration: 20, emissionLongitude: .pi, emissionRange: 0.7, scale: 0.5, scaleRange: 0.3, spin: 1.5, spinRange: 2.2, origin: .top, baseSize: 18)
+        case .cinders:
+            return EffectSpec(kinds: [.dot], colors: [NSColor(calibratedRed: 1, green: 0.55, blue: 0.2, alpha: 1), NSColor(calibratedRed: 1, green: 0.3, blue: 0.1, alpha: 1), NSColor(calibratedRed: 1, green: 0.8, blue: 0.4, alpha: 1)], birthRate: 18, lifetime: 9, velocity: 50, velocityRange: 30, yAcceleration: 26, xAcceleration: 14, emissionLongitude: .pi / 2, emissionRange: 0.7, scale: 0.3, scaleRange: 0.2, scaleSpeed: -0.02, alphaSpeed: -0.08, origin: .bottom, baseSize: 18)
         }
     }
 

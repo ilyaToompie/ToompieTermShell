@@ -92,6 +92,7 @@ struct TerminalPanelView: View {
     @EnvironmentObject private var prefs: AppPreferences
     @State private var editingTabID: UUID?
     @State private var editingText = ""
+    @State private var headerHover = false
 
     private var isFocused: Bool { panel.index == terminalManager.focusedPanelIndex }
 
@@ -144,6 +145,10 @@ struct TerminalPanelView: View {
                 }
             }
 
+            // Per-terminal command/SSH/folder shortcuts. Chips stay visible; the
+            // "+" to add one only shows while the header is hovered.
+            TerminalShortcutBar(panelIndex: panel.index, showAddButton: headerHover)
+
             Button {
                 terminalManager.createTab(in: panel.index)
             } label: {
@@ -166,6 +171,7 @@ struct TerminalPanelView: View {
         .padding(.horizontal, 8)
         .frame(height: 36)
         .background(.ultraThinMaterial)
+        .onHover { headerHover = $0 }
     }
 
     @ViewBuilder

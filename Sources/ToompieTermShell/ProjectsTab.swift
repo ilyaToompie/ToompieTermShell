@@ -54,7 +54,7 @@ struct ProjectsTab: View {
         let active = scope.currentProjectID == project.id
         return Button { scope.currentProjectID = project.id } label: {
             HStack(spacing: 10) {
-                Text(project.icon).font(.title3)
+                IconView(project.icon, size: 20)
                 Circle().fill(Color(hex: project.colorHex)).frame(width: 8, height: 8)
                 Text(project.name).font(.subheadline.weight(.semibold)).lineLimit(1)
                 Spacer()
@@ -128,7 +128,7 @@ struct ProjectEditor: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(project == nil ? loc("projects.add") : loc("projects.rename")).font(.title3.weight(.semibold))
-            EditorRow(loc("ssh.icon")) { EmojiField(text: $icon) }
+            EditorRow(loc("ssh.icon")) { IconPicker(icon: $icon) }
             EditorRow(loc("common.name")) { EditorTextField(title: loc("common.name"), text: $name) }
             HStack(spacing: 8) {
                 ForEach(tagPalette, id: \.self) { hex in

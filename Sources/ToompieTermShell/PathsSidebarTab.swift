@@ -55,7 +55,7 @@ struct PathsSidebarTab: View {
                     ForEach(paths) { path in
                         SidebarCard {
                             HStack(alignment: .firstTextBaseline) {
-                                Text(path.icon).font(.title3)
+                                IconView(path.icon, size: 22)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(path.name).font(.subheadline.weight(.semibold)).lineLimit(1)
                                     Text(path.absolutePath).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
@@ -82,7 +82,7 @@ struct PathsSidebarTab: View {
                                 if !matches.isEmpty {
                                     Menu {
                                         ForEach(matches) { command in
-                                            Button("\(command.icon) \(command.name)") {
+                                            Button(IconRef.labelTitle(command.icon, command.name)) {
                                                 runCommand(command, at: path, in: terminalManager.focusedPanelIndex)
                                             }
                                         }
@@ -138,7 +138,7 @@ struct PinnedPathEditor: View {
         VStack(alignment: .leading, spacing: 16) {
             Text(loc("common.edit")).font(.title3.weight(.semibold))
             VStack(alignment: .leading, spacing: 12) {
-                EditorRow(loc("ssh.icon")) { EmojiField(text: $icon) }
+                EditorRow(loc("ssh.icon")) { IconPicker(icon: $icon) }
                 EditorRow(loc("common.name")) { EditorTextField(title: loc("common.name"), text: $name) }
                 EditorRow(loc("paths.absolute")) {
                     HStack(spacing: 8) {

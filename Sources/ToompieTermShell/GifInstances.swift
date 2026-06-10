@@ -6,6 +6,8 @@ enum GifTapAction: String, Codable, CaseIterable, Identifiable {
     case paletteBasic
     case paletteAdvanced
     case paletteSuper
+    case hideUI
+    case randomTheme
 
     var id: String { rawValue }
 
@@ -15,15 +17,17 @@ enum GifTapAction: String, Codable, CaseIterable, Identifiable {
         case .paletteBasic: return "gif.action.basic"
         case .paletteAdvanced: return "gif.action.advanced"
         case .paletteSuper: return "gif.action.super"
+        case .hideUI: return "gif.action.hideUI"
+        case .randomTheme: return "gif.action.randomTheme"
         }
     }
 
     var paletteLevel: PaletteLevel? {
         switch self {
-        case .none: return nil
         case .paletteBasic: return .basic
         case .paletteAdvanced: return .advanced
         case .paletteSuper: return .superA
+        case .none, .hideUI, .randomTheme: return nil
         }
     }
 }

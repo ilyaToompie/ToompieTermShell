@@ -11,6 +11,12 @@ struct SettingsTab: View {
     @StateObject private var cli = CLILauncher.shared
     @State private var gifURLField = ""
     @State private var cliNameField = ""
+    @State private var bgGifURLField = ""
+    @State private var bgGifDownloading = false
+    @State private var bgGifError = ""
+    @State private var showImageImporter = false
+    @State private var showBgGifImporter = false
+    @State private var showLibGifImporter = false
 
     var body: some View {
         ScrollView {
@@ -28,6 +34,33 @@ struct SettingsTab: View {
             .padding(18)
         }
         .onAppear { if cliNameField.isEmpty { cliNameField = cli.commandName } }
+        // SwiftUI-native file pickers. NSOpenPanel.runModal() runs a nested modal
+        // run loop that leaves a Settings-scene window unresponsive afterwards, so
+        // the choose buttons must NOT use it here.
+        .fileImporter(isPresented: $showImageImporter, allowedContentTypes: [.image], allowsMultipleSelection: false, onCompletion: handleImagePick)
+        .fileImporter(isPresented: $showBgGifImporter, allowedContentTypes: [.gif, .image], allowsMultipleSelection: false, onCompletion: handleBgGifPick)
+        .fileImporter(isPresented: $showLibGifImporter, allowedContentTypes: [.gif, .image], allowsMultipleSelection: false, onCompletion: handleLibGifPick)
+    }
+
+    private func handleImagePick(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result, let url = urls.first else { return }
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        if let stored = BackgroundImageStore.importImage(from: url) { prefs.backgroundImagePath = stored }
+    }
+
+    private func handleBgGifPick(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result, let url = urls.first else { return }
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        if let stored = BackgroundImageStore.importGif(from: url) { prefs.backgroundGifPath = stored }
+    }
+
+    private func handleLibGifPick(_ result: Result<[URL], Error>) {
+        guard case .success(let urls) = result, let url = urls.first else { return }
+        let access = url.startAccessingSecurityScopedResource()
+        defer { if access { url.stopAccessingSecurityScopedResource() } }
+        if let item = gifs.importFile(url) { gifInstances.add(path: gifs.localPath(item)) }
     }
 
     private var cliCard: some View {
@@ -154,9 +187,57 @@ struct SettingsTab: View {
                     effectChip(effect)
                 }
             }
+
+            let tintables = prefs.activeEffects.filter(\.tintable).sorted { $0.rawValue < $1.rawValue }
+            if !tintables.isEmpty {
+                Divider().opacity(0.2)
+                Text(loc("settings.effectColors")).font(.callout.weight(.medium))
+                ForEach(tintables) { effect in
+                    effectColorRow(effect)
+                }
+            }
         }
         .padding(14)
         .glass()
+    }
+
+    static let effectSwatchHexes = ["#39FF14", "#5EEAD4", "#5E9EFF", "#B388FF", "#FF2E97", "#FFB300", "#FF4D4D", "#FFFFFF"]
+
+    private func effectColorRow(_ effect: WeatherEffect) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: effect.icon).font(.system(size: 12)).frame(width: 16)
+            Text(loc(effect.labelKey)).font(.caption).frame(width: 58, alignment: .leading).lineLimit(1)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(Self.effectSwatchHexes, id: \.self) { hex in
+                        let selected = prefs.effectTint(effect).map { NSColor($0).hexString.caseInsensitiveCompare(hex) == .orderedSame } ?? false
+                        Button { prefs.setEffectTint(effect, Color(hex: hex)) } label: {
+                            Circle().fill(Color(hex: hex)).frame(width: 16, height: 16)
+                                .overlay(Circle().stroke(selected ? Color.white : Color.white.opacity(0.35), lineWidth: selected ? 2 : 1))
+                        }
+                        .buttonStyle(.plain)
+                        .hoverScale(1.15)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            ColorPicker("", selection: effectTintBinding(effect), supportsOpacity: false)
+                .labelsHidden().frame(width: 32)
+            Button { prefs.setEffectTint(effect, nil) } label: {
+                Image(systemName: "arrow.uturn.backward.circle")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .opacity(prefs.effectTint(effect) == nil ? 0.3 : 1)
+            .help(loc("settings.effectColorReset"))
+        }
+    }
+
+    private func effectTintBinding(_ effect: WeatherEffect) -> Binding<Color> {
+        Binding(
+            get: { prefs.effectTint(effect) ?? Color(hex: "#FFFFFF") },
+            set: { prefs.setEffectTint(effect, $0) }
+        )
     }
 
     private func effectChip(_ effect: WeatherEffect) -> some View {
@@ -198,7 +279,7 @@ struct SettingsTab: View {
             }
 
             HStack(spacing: 8) {
-                Button { addGifFile() } label: { Label(loc("gif.addFile"), systemImage: "folder") }
+                Button { showLibGifImporter = true } label: { Label(loc("gif.addFile"), systemImage: "folder") }
                 if gifs.downloading { ProgressView().controlSize(.small) }
             }
             HStack(spacing: 8) {
@@ -310,17 +391,6 @@ struct SettingsTab: View {
             Slider(value: value, in: range)
             Text(percent ? "\(Int(value.wrappedValue * 100))%" : "\(Int(value.wrappedValue))\(suffix)")
                 .font(.callout.monospacedDigit()).frame(width: 44, alignment: .trailing)
-        }
-    }
-
-    private func addGifFile() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.gif, .image]
-        if panel.runModal() == .OK, let url = panel.url, let item = gifs.importFile(url) {
-            gifInstances.add(path: gifs.localPath(item))
         }
     }
 
@@ -441,6 +511,17 @@ struct SettingsTab: View {
 
             Toggle(loc("settings.aliased"), isOn: $prefs.disableAntialiasing)
             Toggle(loc("settings.confirmDangerous"), isOn: $prefs.confirmDangerous)
+            Toggle(loc("settings.reduceMotion"), isOn: $prefs.reduceMotion)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(loc("settings.defaultCommitMessage"))
+                    .font(.callout.weight(.medium))
+                TextField(loc("settings.defaultCommitMessage.hint"), text: $prefs.defaultCommitMessage)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            Button(loc("settings.resetPaletteOrder")) { prefs.resetPaletteCategoryOrder() }
+                .controlSize(.small)
         }
         .padding(14)
         .glass()
@@ -541,48 +622,154 @@ struct SettingsTab: View {
                 colorRow("Top", hex: bindingHex(\.gradientTopHex))
                 colorRow("Bottom", hex: bindingHex(\.gradientBottomHex))
             case .image:
-                HStack(spacing: 10) {
-                    Button {
-                        chooseImage()
-                    } label: {
-                        Label(loc("settings.chooseImage"), systemImage: "photo.on.rectangle")
-                    }
-                    if !prefs.backgroundImagePath.isEmpty {
-                        Button(role: .destructive) {
-                            prefs.backgroundImagePath = ""
-                        } label: {
-                            Label(loc("settings.clearImage"), systemImage: "xmark")
-                        }
-                    }
-                }
-                if !prefs.backgroundImagePath.isEmpty, let image = NSImage(contentsOfFile: prefs.backgroundImagePath) {
-                    Image(nsImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(height: 90)
-                        .frame(maxWidth: .infinity)
-                        .grayscale(prefs.bgGrayscale ? 1 : 0)
-                        .brightness(prefs.bgBrightness)
-                        .blur(radius: min(prefs.bgBlur, 8))
-                        .modifier(InvertIf(active: prefs.bgInvert))
-                        .overlay(Color.black.opacity(prefs.bgDim))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                    Text(loc("settings.bgAdjust")).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
-                    Toggle(loc("settings.bgInvert"), isOn: $prefs.bgInvert)
-                    Toggle(loc("settings.bgGrayscale"), isOn: $prefs.bgGrayscale)
-                    slider(loc("settings.bgBlur"), value: $prefs.bgBlur, range: 0...30, suffix: "")
-                    slider(loc("settings.bgDim"), value: $prefs.bgDim, range: 0...0.85, percent: true)
-                    HStack {
-                        Text(loc("settings.bgBrightness")).font(.callout.weight(.medium))
-                        Slider(value: $prefs.bgBrightness, in: -0.5...0.5)
-                        Text("\(Int(prefs.bgBrightness * 100))").font(.callout.monospacedDigit()).frame(width: 44, alignment: .trailing)
-                    }
-                }
+                imageControls
+            case .animated:
+                animatedControls
+            case .gif:
+                gifBackgroundControls
             }
+
+            Divider().opacity(0.2)
+            backgroundAdjust
         }
         .padding(14)
         .glass()
+    }
+
+    @ViewBuilder
+    private var gifBackgroundControls: some View {
+        HStack(spacing: 10) {
+            Button {
+                showBgGifImporter = true
+            } label: {
+                Label(loc("settings.chooseGif"), systemImage: "photo.on.rectangle.angled")
+            }
+            if !prefs.backgroundGifPath.isEmpty {
+                Button(role: .destructive) {
+                    prefs.backgroundGifPath = ""
+                } label: {
+                    Label(loc("settings.clearImage"), systemImage: "xmark")
+                }
+            }
+        }
+        HStack(spacing: 8) {
+            TextField(loc("gif.url"), text: $bgGifURLField).textFieldStyle(.roundedBorder)
+            Button { downloadGifBackground() } label: {
+                if bgGifDownloading { ProgressView().controlSize(.small) }
+                else { Image(systemName: "arrow.down.circle.fill") }
+            }
+            .buttonStyle(.plain)
+            .disabled(bgGifURLField.isEmpty || bgGifDownloading)
+        }
+        if !bgGifError.isEmpty {
+            Text(bgGifError).font(.caption2).foregroundStyle(.orange).lineLimit(2)
+        }
+        if !prefs.backgroundGifPath.isEmpty {
+            AnimatedAssetView(path: prefs.backgroundGifPath, fit: true, playing: true)
+                .frame(height: 90)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
+    @ViewBuilder
+    private var imageControls: some View {
+        HStack(spacing: 10) {
+            Button {
+                showImageImporter = true
+            } label: {
+                Label(loc("settings.chooseImage"), systemImage: "photo.on.rectangle")
+            }
+            if !prefs.backgroundImagePath.isEmpty {
+                Button(role: .destructive) {
+                    prefs.backgroundImagePath = ""
+                } label: {
+                    Label(loc("settings.clearImage"), systemImage: "xmark")
+                }
+            }
+        }
+        if let image = BackgroundImageCache.image(at: prefs.backgroundImagePath) {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(height: 90)
+                .frame(maxWidth: .infinity)
+                .grayscale(prefs.bgGrayscale ? 1 : 0)
+                .saturation(prefs.bgSaturation)
+                .brightness(prefs.bgBrightness)
+                .blur(radius: min(prefs.bgBlur, 8))
+                .modifier(InvertIf(active: prefs.bgInvert))
+                .overlay(Color.black.opacity(prefs.bgDim))
+                // `scaledToFill` overflows its 90pt frame; `clipShape` only masks the
+                // drawing, not hit-testing, so the overflow was capturing every click
+                // in the whole section. `clipped()` constrains it and the preview is
+                // decorative anyway, so it takes no clicks.
+                .clipped()
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .allowsHitTesting(false)
+        }
+    }
+
+    @ViewBuilder
+    private var animatedControls: some View {
+        Text(loc("settings.liveStyle")).font(.callout.weight(.medium))
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 92), spacing: 8)], spacing: 8) {
+            ForEach(LiveBackground.allCases) { style in
+                liveStyleChip(style)
+            }
+        }
+        colorRow("Top", hex: bindingHex(\.gradientTopHex))
+        colorRow("Bottom", hex: bindingHex(\.gradientBottomHex))
+        colorRow(loc("settings.accent"), hex: bindingHex(\.accentHex))
+        HStack {
+            Text(loc("settings.bgSpeed")).font(.callout.weight(.medium))
+            Slider(value: $prefs.bgEffectSpeed, in: 0.1...3.0)
+            Text(String(format: "%.1fx", prefs.bgEffectSpeed)).font(.callout.monospacedDigit()).frame(width: 44, alignment: .trailing)
+        }
+        slider(loc("settings.bgIntensity"), value: $prefs.bgEffectIntensity, range: 0...1, percent: true)
+    }
+
+    private func liveStyleChip(_ style: LiveBackground) -> some View {
+        let active = prefs.liveBackground == style
+        return Button {
+            prefs.liveBackground = style
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: style.icon).font(.system(size: 15))
+                Text(loc(style.labelKey)).font(.caption2.weight(.medium)).lineLimit(1).minimumScaleFactor(0.7)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+            .background(active ? Color.accentColor.opacity(0.25) : Color.white.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 9).stroke(active ? Color.accentColor : Color.white.opacity(0.1)))
+            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(active ? Color.accentColor : Color.secondary)
+        .hoverScale(1.05)
+    }
+
+    @ViewBuilder
+    private var backgroundAdjust: some View {
+        Text(loc("settings.bgAdjustAll")).font(.subheadline.weight(.semibold)).foregroundStyle(.secondary)
+        Toggle(loc("settings.bgInvert"), isOn: $prefs.bgInvert)
+        Toggle(loc("settings.bgGrayscale"), isOn: $prefs.bgGrayscale)
+        Toggle(loc("settings.bgScanlines"), isOn: $prefs.bgScanlines)
+        slider(loc("settings.bgBlur"), value: $prefs.bgBlur, range: 0...30, suffix: "")
+        slider(loc("settings.bgDim"), value: $prefs.bgDim, range: 0...0.85, percent: true)
+        slider(loc("settings.bgVignette"), value: $prefs.bgVignette, range: 0...1, percent: true)
+        slider(loc("settings.bgGrain"), value: $prefs.bgGrain, range: 0...1, percent: true)
+        HStack {
+            Text(loc("settings.bgSaturation")).font(.callout.weight(.medium))
+            Slider(value: $prefs.bgSaturation, in: 0...2)
+            Text("\(Int(prefs.bgSaturation * 100))%").font(.callout.monospacedDigit()).frame(width: 44, alignment: .trailing)
+        }
+        HStack {
+            Text(loc("settings.bgBrightness")).font(.callout.weight(.medium))
+            Slider(value: $prefs.bgBrightness, in: -0.5...0.5)
+            Text("\(Int(prefs.bgBrightness * 100))").font(.callout.monospacedDigit()).frame(width: 44, alignment: .trailing)
+        }
     }
 
     private var aboutCard: some View {
@@ -641,14 +828,19 @@ struct SettingsTab: View {
         )
     }
 
-    private func chooseImage() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = true
-        panel.canChooseDirectories = false
-        panel.allowsMultipleSelection = false
-        panel.allowedContentTypes = [.png, .jpeg, .image]
-        if panel.runModal() == .OK, let url = panel.url, let stored = BackgroundImageStore.importImage(from: url) {
-            prefs.backgroundImagePath = stored
+    private func downloadGifBackground() {
+        let url = bgGifURLField
+        bgGifDownloading = true
+        bgGifError = ""
+        Task {
+            let path = await BackgroundImageStore.downloadGif(from: url)
+            bgGifDownloading = false
+            if let path {
+                prefs.backgroundGifPath = path
+                bgGifURLField = ""
+            } else {
+                bgGifError = loc("settings.gifDownloadFailed")
+            }
         }
     }
 }

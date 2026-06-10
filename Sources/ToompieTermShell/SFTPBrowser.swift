@@ -108,7 +108,7 @@ struct SFTPBrowserView: View {
     var body: some View {
         VStack(spacing: 10) {
             HStack(spacing: 8) {
-                Text(shortcut.icon).font(.title3)
+                IconView(shortcut.icon, size: 22)
                 VStack(alignment: .leading, spacing: 1) {
                     Text("\(shortcut.username)@\(shortcut.host)").font(.subheadline.weight(.semibold))
                     Text(loc("ssh.files")).font(.caption2).foregroundStyle(.secondary)

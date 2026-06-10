@@ -42,7 +42,7 @@ struct SSHSidebarTab: View {
                     ForEach(shortcuts) { shortcut in
                         SidebarCard {
                             HStack(alignment: .firstTextBaseline) {
-                                Text(shortcut.icon).font(.title3)
+                                IconView(shortcut.icon, size: 22)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(shortcut.name).font(.subheadline.weight(.semibold)).lineLimit(1)
                                     Text("\(shortcut.username)@\(shortcut.host):\(shortcut.port)")
@@ -171,7 +171,7 @@ struct SSHShortcutEditor: View {
                     .font(.title3.weight(.semibold))
 
                 VStack(alignment: .leading, spacing: 12) {
-                    EditorRow(loc("ssh.icon")) { EmojiField(text: $icon) }
+                    EditorRow(loc("ssh.icon")) { IconPicker(icon: $icon) }
                     EditorRow(loc("common.name")) { EditorTextField(title: loc("common.name"), text: $name) }
                     EditorRow(loc("servers.host")) { EditorTextField(title: loc("servers.host"), text: $host) }
                     EditorRow(loc("servers.port")) {

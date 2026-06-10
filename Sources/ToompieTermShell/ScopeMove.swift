@@ -37,7 +37,7 @@ struct ScopeMoveMenu: View {
             Button {
                 action(project.id)
             } label: {
-                Label("\(project.icon) \(project.name)", systemImage: project.id == currentProjectID ? "checkmark" : "folder")
+                Label(IconRef.labelTitle(project.icon, project.name), systemImage: project.id == currentProjectID ? "checkmark" : "folder")
             }
             .disabled(project.id == currentProjectID)
         }

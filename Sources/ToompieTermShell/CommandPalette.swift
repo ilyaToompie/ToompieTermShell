@@ -85,15 +85,25 @@ final class PaletteController: ObservableObject {
     }
 }
 
-/// Visual + ordering groups for palette rows. `allCases` order is the on-screen order, so the
-/// user's own saved items — favourite directories ("locations") first — sit above the large
-/// built-in command catalogue instead of being buried in it.
-enum PaletteSection: Int, CaseIterable {
-    case favourites   // pinned directories ("locations")
-    case commands     // saved command shortcuts
-    case connections  // saved SSH shortcuts
-    case scopes       // global / project scope switch
-    case builtin      // built-in command catalogue
+/// Visual + ordering groups ("categories") for palette rows. The on-screen order
+/// is user-controlled — drag a category header to reprioritise it — and persisted
+/// in AppPreferences. `allCases` (in this declaration order) is only the default
+/// order for a fresh install. The old monolithic "built-in" block is split into
+/// its topics so e.g. Git can be lifted above your own saved Commands.
+enum PaletteCategory: String, CaseIterable, Identifiable {
+    case favourites    // pinned directories ("locations")
+    case commands      // saved command shortcuts
+    case connections   // saved SSH shortcuts
+    case scopes        // global / project scope switch
+    case terminal      // built-in: everyday terminal
+    case git           // built-in: git
+    case system        // built-in: system inspection / power
+    case network       // built-in: network
+    case dev           // built-in: dev tooling
+    case docker        // built-in: docker
+    case sshTools      // built-in: ssh key/config helpers
+
+    var id: String { rawValue }
 
     var titleKey: String {
         switch self {
@@ -101,7 +111,13 @@ enum PaletteSection: Int, CaseIterable {
         case .commands: return "tab.commands"
         case .connections: return "tab.ssh"
         case .scopes: return "projects.scope"
-        case .builtin: return "palette.builtin"
+        case .terminal: return "palette.cat.terminal"
+        case .git: return "palette.cat.git"
+        case .system: return "palette.cat.system"
+        case .network: return "palette.cat.network"
+        case .dev: return "palette.cat.dev"
+        case .docker: return "palette.cat.docker"
+        case .sshTools: return "palette.cat.sshTools"
         }
     }
 
@@ -111,8 +127,26 @@ enum PaletteSection: Int, CaseIterable {
         case .commands: return "terminal.fill"
         case .connections: return "network"
         case .scopes: return "globe"
-        case .builtin: return "wand.and.stars"
+        case .terminal: return "wand.and.stars"
+        case .git: return "arrow.triangle.branch"
+        case .system: return "cpu"
+        case .network: return "antenna.radiowaves.left.and.right"
+        case .dev: return "hammer.fill"
+        case .docker: return "shippingbox.fill"
+        case .sshTools: return "key.fill"
         }
+    }
+
+    /// Maps a built-in command's subtitle ("Git", "System · power", …) to its category.
+    static func forBuiltin(subtitle: String) -> PaletteCategory {
+        let key = subtitle.lowercased()
+        if key.hasPrefix("git") { return .git }
+        if key.hasPrefix("docker") { return .docker }
+        if key.hasPrefix("system") { return .system }
+        if key.hasPrefix("network") { return .network }
+        if key.hasPrefix("dev") { return .dev }
+        if key.hasPrefix("ssh") { return .sshTools }
+        return .terminal
     }
 }
 
@@ -123,8 +157,14 @@ struct PaletteItem: Identifiable {
     let subtitle: String
     let tint: Color
     var inputPrompt: String? = nil
+    /// Used when the user submits the input field empty (e.g. the default git
+    /// commit message). The placeholder shows it as a hint.
+    var defaultInput: String? = nil
     var tier: PaletteLevel = .basic
-    var section: PaletteSection = .builtin
+    var category: PaletteCategory = .terminal
+    /// The user's own icon string (emoji / `sf:` / `gif:`) for saved & scope rows;
+    /// rendered in place of `icon` when set. Built-ins leave this nil.
+    var displayIcon: String? = nil
     let run: (String) -> Void
 }
 
@@ -161,23 +201,36 @@ struct CommandPalette: View {
     @FocusState private var searchFocused: Bool
     @FocusState private var inputFocused: Bool
 
+    /// All palette commands replace whatever is already half-typed at the prompt
+    /// (clearLine) rather than appending to it.
     private func runInFocused(_ command: String) {
-        terminalManager.runCommand(command, workingDirectory: nil, in: terminalManager.focusedPanelIndex)
+        terminalManager.runCommand(command, workingDirectory: nil, in: terminalManager.focusedPanelIndex, clearLine: true)
     }
 
     // MARK: - Built-in commands (tiered)
 
     private func cmd(_ tier: PaletteLevel, _ icon: String, _ title: String, _ sub: String, _ tint: Color, _ command: String) -> PaletteItem {
-        PaletteItem(icon: icon, title: title, subtitle: sub, tint: tint, tier: tier) { _ in runInFocused(command) }
+        PaletteItem(icon: icon, title: title, subtitle: sub, tint: tint, tier: tier, category: .forBuiltin(subtitle: sub)) { _ in runInFocused(command) }
     }
 
     private func ask(_ tier: PaletteLevel, _ icon: String, _ title: String, _ sub: String, _ tint: Color, _ prompt: String, _ build: @escaping (String) -> String) -> PaletteItem {
-        PaletteItem(icon: icon, title: title, subtitle: sub, tint: tint, inputPrompt: prompt, tier: tier) { v in runInFocused(build(v)) }
+        PaletteItem(icon: icon, title: title, subtitle: sub, tint: tint, inputPrompt: prompt, tier: tier, category: .forBuiltin(subtitle: sub)) { v in runInFocused(build(v)) }
+    }
+
+    /// The git-commit row, with the user's configured default message wired in as
+    /// the empty-field fallback (and shown as a placeholder hint).
+    private var commitItem: PaletteItem {
+        var item = ask(.basic, "checkmark.seal.fill", "Git: Commit (add . + message)", "Git", .orange, loc("palette.commitMessage")) {
+            "git add . && git commit -m \(ShellSafety.singleQuoted($0))"
+        }
+        let def = prefs.defaultCommitMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+        item.defaultInput = def.isEmpty ? nil : def
+        return item
     }
 
     private var builtinItems: [PaletteItem] {
         let git = Color.orange, term = Color.accentColor, sys = Color.teal, dev = Color.green, net = Color.blue, danger = Color.red
-        let commitMsg = loc("palette.commitMessage"), branch = loc("palette.branchName")
+        let branch = loc("palette.branchName")
         var all: [PaletteItem] = []
 
         // — Basic: everyday terminal + git —
@@ -187,9 +240,7 @@ struct CommandPalette: View {
             cmd(.basic, "location.north.line", "Print working directory", "Terminal", term, "pwd"),
             cmd(.basic, "doc.text.magnifyingglass", "Git: Status", "Git", git, "git status"),
             cmd(.basic, "plus.square.on.square", "Git: Stage all", "Git", git, "git add ."),
-            ask(.basic, "checkmark.seal.fill", "Git: Commit (add . + message)", "Git", git, commitMsg) {
-                "git add . && git commit -m \(ShellSafety.singleQuoted($0))"
-            },
+            commitItem,
             cmd(.basic, "arrow.up.circle.fill", "Git: Push", "Git", git, "git push"),
             cmd(.basic, "arrow.down.circle.fill", "Git: Pull", "Git", git, "git pull"),
             cmd(.basic, "text.alignleft", "Git: Diff", "Git", git, "git diff"),
@@ -274,12 +325,12 @@ struct CommandPalette: View {
 
     private var scopeItems: [PaletteItem] {
         var result: [PaletteItem] = [
-            PaletteItem(icon: "globe", title: loc("scope.global"), subtitle: loc("projects.scope"), tint: .gray, section: .scopes) { _ in
+            PaletteItem(icon: "globe", title: loc("scope.global"), subtitle: loc("projects.scope"), tint: .gray, category: .scopes) { _ in
                 scope.currentProjectID = nil
             }
         ]
         for project in projects {
-            result.append(PaletteItem(icon: "folder", title: "\(project.icon) \(project.name)", subtitle: loc("projects.scope"), tint: Color(hex: project.colorHex), section: .scopes) { _ in
+            result.append(PaletteItem(icon: "folder", title: project.name, subtitle: loc("projects.scope"), tint: Color(hex: project.colorHex), category: .scopes, displayIcon: project.icon) { _ in
                 scope.currentProjectID = project.id
             })
         }
@@ -296,18 +347,18 @@ struct CommandPalette: View {
         var result: [PaletteItem] = []
         // Favourite directories first — these are what the user most often wants from the palette.
         for l in locations where inScope(l.projectID) {
-            result.append(PaletteItem(icon: "mappin.and.ellipse", title: "\(l.icon) \(l.name)", subtitle: l.absolutePath, tint: .orange, section: .favourites) { _ in
-                terminalManager.cd(to: l.absolutePath, in: terminalManager.focusedPanelIndex)
+            result.append(PaletteItem(icon: "mappin.and.ellipse", title: l.name, subtitle: l.absolutePath, tint: .orange, category: .favourites, displayIcon: l.icon) { _ in
+                terminalManager.cd(to: l.absolutePath, in: terminalManager.focusedPanelIndex, clearLine: true)
             })
         }
         for c in commands where inScope(c.projectID) {
-            result.append(PaletteItem(icon: "terminal", title: "\(c.icon) \(c.name)", subtitle: c.command, tint: .green, section: .commands) { _ in
+            result.append(PaletteItem(icon: "terminal", title: c.name, subtitle: c.command, tint: .green, category: .commands, displayIcon: c.icon) { _ in
                 let dir = c.workingDirectory.isEmpty ? nil : c.workingDirectory
-                terminalManager.runCommand(c.command, workingDirectory: dir, in: terminalManager.focusedPanelIndex)
+                terminalManager.runCommand(c.command, workingDirectory: dir, in: terminalManager.focusedPanelIndex, clearLine: true)
             })
         }
         for s in ssh where inScope(s.projectID) {
-            result.append(PaletteItem(icon: "network", title: "\(s.icon) \(s.name)", subtitle: "\(s.username)@\(s.host)", tint: .blue, section: .connections) { _ in
+            result.append(PaletteItem(icon: "network", title: s.name, subtitle: "\(s.username)@\(s.host)", tint: .blue, category: .connections, displayIcon: s.icon) { _ in
                 var cmd = SSHCommandBuilder.command(for: s) + SSHCommandBuilder.startupSuffix(for: s)
                 if s.authType == .password { cmd += "\n" }
                 runInFocused(cmd)
@@ -357,8 +408,8 @@ struct CommandPalette: View {
         // surface above the built-in catalogue — both at rest and while searching. Within a
         // section, matches are ranked by relevance.
         var result: [PaletteItem] = []
-        for section in PaletteSection.allCases {
-            let inSection = all.filter { $0.section == section }
+        for section in prefs.paletteCategoryOrder {
+            let inSection = all.filter { $0.category == section }
             if q.isEmpty {
                 result += inSection
             } else {
@@ -441,8 +492,8 @@ struct CommandPalette: View {
                         ForEach(Array(rows.enumerated()), id: \.offset) { index, item in
                             // A lightweight header leads each section's first row, so favourite
                             // directories read as a distinct, prominent group.
-                            if index == 0 || rows[index - 1].section != item.section {
-                                sectionHeader(item.section)
+                            if index == 0 || rows[index - 1].category != item.category {
+                                categoryHeader(item.category)
                             }
                             row(item, active: index == model.selection)
                                 .id(index)
@@ -462,10 +513,13 @@ struct CommandPalette: View {
         .onExitCommand { dismiss() }
     }
 
-    private func sectionHeader(_ section: PaletteSection) -> some View {
+    /// A category header. Drag one header onto another to reprioritise categories;
+    /// the new order is persisted in AppPreferences.
+    private func categoryHeader(_ category: PaletteCategory) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: section.icon).font(.system(size: 9, weight: .semibold))
-            Text(loc(section.titleKey).uppercased())
+            Image(systemName: "line.3.horizontal").font(.system(size: 9, weight: .semibold)).foregroundStyle(.tertiary)
+            Image(systemName: category.icon).font(.system(size: 9, weight: .semibold))
+            Text(loc(category.titleKey).uppercased())
                 .font(.caption2.weight(.semibold))
                 .tracking(0.6)
             Spacer()
@@ -474,6 +528,20 @@ struct CommandPalette: View {
         .padding(.horizontal, 12)
         .padding(.top, 10)
         .padding(.bottom, 1)
+        .contentShape(Rectangle())
+        .help(loc("palette.reorderHint"))
+        .draggable(category.rawValue) {
+            Text(loc(category.titleKey))
+                .font(.caption2.weight(.semibold))
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(.ultraThinMaterial, in: Capsule())
+        }
+        .dropDestination(for: String.self) { items, _ in
+            guard let raw = items.first, let moved = PaletteCategory(rawValue: raw), moved != category else { return false }
+            prefs.movePaletteCategory(moved, onto: category)
+            model.selection = 0
+            return true
+        }
     }
 
     private func inputView(_ item: PaletteItem) -> some View {
@@ -485,17 +553,22 @@ struct CommandPalette: View {
                 Text(item.title).font(.headline)
                 Spacer()
             }
-            TextField(item.inputPrompt ?? "", text: $model.inputText)
+            TextField(inputPlaceholder(item), text: $model.inputText)
                 .textFieldStyle(.roundedBorder)
                 .font(.title3)
                 .focused($inputFocused)
                 .onSubmit { confirmInput(item) }
+            if let def = item.defaultInput, !def.isEmpty {
+                Text(loc("palette.useDefaultHint"))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
             HStack {
                 Spacer()
                 Button(loc("common.cancel")) { model.pending = nil; model.inputText = "" }
                 Button(loc("common.run")) { confirmInput(item) }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(model.inputText.isEmpty)
+                    .disabled(model.inputText.isEmpty && (item.defaultInput ?? "").isEmpty)
             }
         }
         .padding(22)
@@ -508,12 +581,22 @@ struct CommandPalette: View {
         .onExitCommand { model.pending = nil; model.inputText = "" }
     }
 
+    @ViewBuilder
+    private func rowIcon(_ item: PaletteItem) -> some View {
+        Group {
+            if let display = item.displayIcon {
+                IconView(display, size: 16)
+            } else {
+                Image(systemName: item.icon).foregroundStyle(.white)
+            }
+        }
+        .frame(width: 26, height: 26)
+        .background(LinearGradient(colors: [item.tint, item.tint.opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+    }
+
     private func row(_ item: PaletteItem, active: Bool) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: item.icon)
-                .foregroundStyle(.white)
-                .frame(width: 26, height: 26)
-                .background(LinearGradient(colors: [item.tint, item.tint.opacity(0.6)], startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+            rowIcon(item)
             VStack(alignment: .leading, spacing: 1) {
                 Text(item.title).font(.callout.weight(.medium)).lineLimit(1)
                 if !item.subtitle.isEmpty {
@@ -566,9 +649,17 @@ struct CommandPalette: View {
         }
     }
 
+    /// Shows the configured default as the placeholder (a "hint") when present, so
+    /// leaving the field empty visibly means "use the default".
+    private func inputPlaceholder(_ item: PaletteItem) -> String {
+        if let def = item.defaultInput, !def.isEmpty { return def }
+        return item.inputPrompt ?? ""
+    }
+
     private func confirmInput(_ item: PaletteItem) {
-        guard !model.inputText.isEmpty else { return }
-        item.run(model.inputText)
+        let effective = model.inputText.isEmpty ? (item.defaultInput ?? "") : model.inputText
+        guard !effective.isEmpty else { return }
+        item.run(effective)
         model.pending = nil
         model.inputText = ""
         dismiss()

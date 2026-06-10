@@ -13,6 +13,12 @@ enum ShellSafety {
         command.hasSuffix("\n") ? command : command + "\n"
     }
 
+    /// Control bytes that wipe whatever is already on the shell's current input
+    /// line — Ctrl-E jumps to the end, Ctrl-U kills the whole line — so a command
+    /// injected from the palette or a shortcut *replaces* a half-typed line
+    /// instead of being appended to it. A no-op at an empty prompt.
+    static let lineReset = "\u{05}\u{15}"
+
     static func containsObviousDangerousPattern(_ command: String) -> Bool {
         let normalized = command
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)

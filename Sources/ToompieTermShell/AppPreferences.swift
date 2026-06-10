@@ -33,6 +33,8 @@ enum AppBackgroundMode: String, CaseIterable, Identifiable {
     case solid
     case gradient
     case image
+    case animated
+    case gif
 
     var id: String { rawValue }
 
@@ -42,6 +44,8 @@ enum AppBackgroundMode: String, CaseIterable, Identifiable {
         case .solid: return "bg.solid"
         case .gradient: return "bg.gradient"
         case .image: return "bg.image"
+        case .animated: return "bg.animated"
+        case .gif: return "bg.gif"
         }
     }
 }
@@ -73,6 +77,7 @@ struct UIThemePreset: Identifiable {
     let gradientBottom: String
     let effects: [WeatherEffect]
     var mode: AppBackgroundMode = .gradient
+    var live: LiveBackground? = nil
 
     static let all: [UIThemePreset] = [
         UIThemePreset(id: "system", name: "System", accent: "#5E9EFF", foreground: "#E1E6EC", background: "#12141B", gradientTop: "#161B2E", gradientBottom: "#080A12", effects: [], mode: .native),
@@ -88,7 +93,19 @@ struct UIThemePreset: Identifiable {
         UIThemePreset(id: "nord", name: "Nord", accent: "#88C0D0", foreground: "#D8DEE9", background: "#222730", gradientTop: "#2E3440", gradientBottom: "#1B1F26", effects: []),
         UIThemePreset(id: "ocean", name: "Ocean", accent: "#4FC3F7", foreground: "#CDE7FF", background: "#06121F", gradientTop: "#0A2438", gradientBottom: "#040C16", effects: [.bubbles]),
         UIThemePreset(id: "ember", name: "Ember", accent: "#FF7A18", foreground: "#FFE8D6", background: "#150B06", gradientTop: "#2A160C", gradientBottom: "#0A0503", effects: [.embers]),
-        UIThemePreset(id: "sakura", name: "Sakura", accent: "#FF7EB6", foreground: "#FFF0F5", background: "#1E141A", gradientTop: "#321F2B", gradientBottom: "#130C11", effects: [.petals])
+        UIThemePreset(id: "sakura", name: "Sakura", accent: "#FF7EB6", foreground: "#FFF0F5", background: "#1E141A", gradientTop: "#321F2B", gradientBottom: "#130C11", effects: [.petals]),
+        // Editor-inspired palettes
+        UIThemePreset(id: "dracula", name: "Dracula", accent: "#BD93F9", foreground: "#F8F8F2", background: "#282A36", gradientTop: "#343746", gradientBottom: "#1E1F29", effects: []),
+        UIThemePreset(id: "gruvbox", name: "Gruvbox", accent: "#FABD2F", foreground: "#EBDBB2", background: "#282828", gradientTop: "#3C3836", gradientBottom: "#1D2021", effects: []),
+        UIThemePreset(id: "solarized", name: "Solarized", accent: "#268BD2", foreground: "#93A1A1", background: "#002B36", gradientTop: "#073642", gradientBottom: "#00212B", effects: []),
+        UIThemePreset(id: "catppuccin", name: "Catppuccin", accent: "#CBA6F7", foreground: "#CDD6F4", background: "#1E1E2E", gradientTop: "#302D41", gradientBottom: "#181825", effects: []),
+        UIThemePreset(id: "rosepine", name: "Rosé Pine", accent: "#EBBCBA", foreground: "#E0DEF4", background: "#191724", gradientTop: "#26233A", gradientBottom: "#12101C", effects: []),
+        UIThemePreset(id: "everforest", name: "Everforest", accent: "#A7C080", foreground: "#D3C6AA", background: "#2B3339", gradientTop: "#374247", gradientBottom: "#1E2326", effects: []),
+        // Live / effect-forward presets
+        UIThemePreset(id: "lava", name: "Lava Lamp", accent: "#FF6A3D", foreground: "#FFE8D6", background: "#120604", gradientTop: "#2A0E06", gradientBottom: "#070302", effects: [], mode: .animated, live: .lavalamp),
+        UIThemePreset(id: "auroraNight", name: "Aurora", accent: "#5EEAD4", foreground: "#D7FFF5", background: "#04121A", gradientTop: "#0A2A33", gradientBottom: "#030A10", effects: [], mode: .animated, live: .aurora),
+        UIThemePreset(id: "deepspace", name: "Deep Space", accent: "#8B9CFF", foreground: "#DCE2FF", background: "#04040C", gradientTop: "#0B1030", gradientBottom: "#020208", effects: [.stars], mode: .animated, live: .starfield),
+        UIThemePreset(id: "vaporwave", name: "Vaporwave", accent: "#FF6AD5", foreground: "#FFF0FB", background: "#1A0B2E", gradientTop: "#3B1466", gradientBottom: "#0E0420", effects: [], mode: .animated, live: .gradientFlow)
     ]
 }
 
@@ -115,15 +132,11 @@ enum WeatherEffect: String, CaseIterable, Identifiable {
     case aurora
     case fireworks
     case smoke
-    case plasma
     case ripples
     case rainbow
-    case notes
-    case bats
-    case ghosts
-    case pumpkins
-    case balloons
-    case coins
+    case snowstorm
+    case blossoms
+    case cinders
 
     var id: String { rawValue }
 
@@ -153,15 +166,21 @@ enum WeatherEffect: String, CaseIterable, Identifiable {
         case .aurora: return "sun.haze.fill"
         case .fireworks: return "fireworks"
         case .smoke: return "smoke.fill"
-        case .plasma: return "atom"
         case .ripples: return "dot.radiowaves.left.and.right"
         case .rainbow: return "rainbow"
-        case .notes: return "music.note"
-        case .bats: return "bird.fill"
-        case .ghosts: return "theatermasks.fill"
-        case .pumpkins: return "carrot.fill"
-        case .balloons: return "balloon.fill"
-        case .coins: return "dollarsign.circle.fill"
+        case .snowstorm: return "wind.snow"
+        case .blossoms: return "fan.fill"
+        case .cinders: return "flame.fill"
+        }
+    }
+
+    /// Effects whose particles read well recolored to a single user-chosen tint.
+    /// Multi-color effects (confetti, fireworks, rainbow, aurora) and rain are
+    /// excluded — a single tint would defeat their look.
+    var tintable: Bool {
+        switch self {
+        case .off, .rain, .confetti, .fireworks, .rainbow, .aurora: return false
+        default: return true
         }
     }
 }
@@ -252,6 +271,21 @@ final class AppPreferences: ObservableObject {
     @Published var bgBlur: Double { didSet { store(bgBlur, "bgBlur") } }
     @Published var bgBrightness: Double { didSet { store(bgBrightness, "bgBrightness") } }
     @Published var bgDim: Double { didSet { store(bgDim, "bgDim") } }
+    @Published var bgSaturation: Double { didSet { store(bgSaturation, "bgSaturation") } }
+    @Published var bgVignette: Double { didSet { store(bgVignette, "bgVignette") } }
+    @Published var bgGrain: Double { didSet { store(bgGrain, "bgGrain") } }
+    @Published var bgScanlines: Bool { didSet { store(bgScanlines, "bgScanlines") } }
+    @Published var liveBackgroundRaw: String { didSet { store(liveBackgroundRaw, "liveBackground") } }
+    @Published var bgEffectSpeed: Double { didSet { store(bgEffectSpeed, "bgEffectSpeed") } }
+    @Published var bgEffectIntensity: Double { didSet { store(bgEffectIntensity, "bgEffectIntensity") } }
+    @Published var backgroundGifPath: String { didSet { store(backgroundGifPath, "backgroundGifPath") } }
+    @Published var effectTintsRaw: String { didSet { store(effectTintsRaw, "effectTints") } }
+    @Published var defaultCommitMessage: String { didSet { store(defaultCommitMessage, "defaultCommitMessage") } }
+    @Published var paletteCategoryOrderRaw: String { didSet { store(paletteCategoryOrderRaw, "paletteCategoryOrder") } }
+    /// Master switch that makes the ambient, always-on animations (the floating
+    /// decor blobs, the rotating focus border, the running-tab pulse) hold still.
+    /// Off by default; flipping it on is the single biggest idle-CPU/GPU saving.
+    @Published var reduceMotion: Bool { didSet { store(reduceMotion, "reduceMotion") } }
 
     private let defaults = UserDefaults.standard
 
@@ -309,7 +343,22 @@ final class AppPreferences: ObservableObject {
         bgGrayscale = d.bool(forKey: "bgGrayscale")
         bgBlur = d.double(forKey: "bgBlur")
         bgBrightness = d.double(forKey: "bgBrightness")
-        bgDim = d.object(forKey: "bgDim") == nil ? 0.35 : d.double(forKey: "bgDim")
+        // Defaults to 0: bgDim is now a universal post-processing filter applied to
+        // every background mode, so it must start neutral (like blur/vignette/grain)
+        // rather than silently darkening existing solid/gradient setups on upgrade.
+        bgDim = d.double(forKey: "bgDim")
+        bgSaturation = d.object(forKey: "bgSaturation") == nil ? 1.0 : d.double(forKey: "bgSaturation")
+        bgVignette = d.double(forKey: "bgVignette")
+        bgGrain = d.double(forKey: "bgGrain")
+        bgScanlines = d.bool(forKey: "bgScanlines")
+        liveBackgroundRaw = d.string(forKey: "liveBackground") ?? LiveBackground.aurora.rawValue
+        bgEffectSpeed = d.object(forKey: "bgEffectSpeed") == nil ? 1.0 : d.double(forKey: "bgEffectSpeed")
+        bgEffectIntensity = d.object(forKey: "bgEffectIntensity") == nil ? 0.7 : d.double(forKey: "bgEffectIntensity")
+        backgroundGifPath = d.string(forKey: "backgroundGifPath") ?? ""
+        effectTintsRaw = d.string(forKey: "effectTints") ?? ""
+        defaultCommitMessage = d.string(forKey: "defaultCommitMessage") ?? ""
+        paletteCategoryOrderRaw = d.string(forKey: "paletteCategoryOrder") ?? ""
+        reduceMotion = d.bool(forKey: "reduceMotion")
         crtMode = d.bool(forKey: "crtMode")
         schemeRaw = d.string(forKey: "uiScheme") ?? "dark"
         shellPath = d.string(forKey: "shellPath") ?? ""
@@ -332,6 +381,30 @@ final class AppPreferences: ObservableObject {
         set { schemeRaw = newValue.rawValue }
     }
 
+    /// Randomizes the whole look: a random palette preset, a random background
+    /// mode (with a random live style), and a random handful of weather effects.
+    func randomizeTheme() {
+        if let preset = UIThemePreset.all.randomElement() {
+            applyPreset(preset)
+        }
+        let modes: [AppBackgroundMode] = [.gradient, .animated, .animated, .solid]
+        if let mode = modes.randomElement() {
+            backgroundMode = mode
+            if mode == .animated, let live = LiveBackground.allCases.randomElement() {
+                liveBackground = live
+            }
+            if mode == .solid {
+                windowColorHex = gradientBottomHex
+            }
+        }
+        let pool = WeatherEffect.allCases.filter { $0 != .off }
+        var chosen = Set<WeatherEffect>()
+        for _ in 0..<Int.random(in: 0...2) {
+            if let effect = pool.randomElement() { chosen.insert(effect) }
+        }
+        activeEffects = chosen
+    }
+
     func applyPreset(_ preset: UIThemePreset) {
         accentHex = preset.accent
         foregroundHex = preset.foreground
@@ -339,7 +412,92 @@ final class AppPreferences: ObservableObject {
         gradientTopHex = preset.gradientTop
         gradientBottomHex = preset.gradientBottom
         backgroundMode = preset.mode
+        if let live = preset.live { liveBackground = live }
         activeEffects = Set(preset.effects)
+    }
+
+    var liveBackground: LiveBackground {
+        get { LiveBackground(rawValue: liveBackgroundRaw) ?? .aurora }
+        set { liveBackgroundRaw = newValue.rawValue }
+    }
+
+    // MARK: - Command palette category order
+
+    /// The user's on-screen order of palette categories. Categories not yet in the
+    /// stored list (e.g. ones introduced in a later build) are appended in their
+    /// natural order, so the setting stays forward-compatible.
+    var paletteCategoryOrder: [PaletteCategory] {
+        let stored = paletteCategoryOrderRaw
+            .split(separator: ",")
+            .compactMap { PaletteCategory(rawValue: String($0)) }
+        var seen = Set(stored)
+        var result = stored
+        for category in PaletteCategory.allCases where !seen.contains(category) {
+            result.append(category)
+            seen.insert(category)
+        }
+        return result
+    }
+
+    func setPaletteCategoryOrder(_ order: [PaletteCategory]) {
+        paletteCategoryOrderRaw = order.map(\.rawValue).joined(separator: ",")
+    }
+
+    /// Drops `moved` onto `target`, placing it after the target when dragged down
+    /// and before it when dragged up — the natural drag-reorder behaviour. Inserting
+    /// at the target's *original* index (computed before removal) yields exactly that
+    /// for every case, and is never a no-op for an adjacent swap.
+    func movePaletteCategory(_ moved: PaletteCategory, onto target: PaletteCategory) {
+        guard moved != target else { return }
+        var order = paletteCategoryOrder
+        guard let from = order.firstIndex(of: moved), let to = order.firstIndex(of: target) else { return }
+        order.remove(at: from)
+        order.insert(moved, at: min(to, order.count))
+        setPaletteCategoryOrder(order)
+    }
+
+    func resetPaletteCategoryOrder() {
+        paletteCategoryOrderRaw = ""
+    }
+
+    // MARK: - Per-effect color tints
+
+    var effectTints: [String: String] {
+        get {
+            guard let data = effectTintsRaw.data(using: .utf8),
+                  let decoded = try? JSONDecoder().decode([String: String].self, from: data)
+            else { return [:] }
+            return decoded
+        }
+        set {
+            if let data = try? JSONEncoder().encode(newValue), let json = String(data: data, encoding: .utf8) {
+                effectTintsRaw = json
+            } else {
+                effectTintsRaw = ""
+            }
+        }
+    }
+
+    /// Tints for only the effects that are currently active and tintable —
+    /// what the overlay actually needs.
+    var activeEffectTints: [String: String] {
+        let tints = effectTints
+        var result: [String: String] = [:]
+        for effect in activeEffects where effect.tintable {
+            if let hex = tints[effect.rawValue] { result[effect.rawValue] = hex }
+        }
+        return result
+    }
+
+    func effectTint(_ effect: WeatherEffect) -> SwiftUI.Color? {
+        guard let hex = effectTints[effect.rawValue] else { return nil }
+        return SwiftUI.Color(hex: hex)
+    }
+
+    func setEffectTint(_ effect: WeatherEffect, _ color: SwiftUI.Color?) {
+        var tints = effectTints
+        if let color { tints[effect.rawValue] = NSColor(color).hexString } else { tints.removeValue(forKey: effect.rawValue) }
+        effectTints = tints
     }
 
     var activeEffects: Set<WeatherEffect> {
