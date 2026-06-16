@@ -63,11 +63,11 @@ struct DecorBlobs: View {
 
     var body: some View {
         Group {
-            // 20 fps (down from 30) is plenty for a slow, heavily-blurred drift and
-            // cuts this constantly-running blur recomposite — the heaviest idle
-            // cost — by a third. Reduce-motion / hidden windows freeze it entirely.
+            // A slow, heavily-blurred drift — capped at the graphics tier's frame
+            // rate (Potato 15 → Ludicrous 60; the old 20 fps sat between the
+            // Medium/High defaults). Reduce-motion / hidden windows freeze it.
             if motion.animate && !prefs.reduceMotion {
-                TimelineView(.animation(minimumInterval: 1.0 / 20.0)) { context in
+                TimelineView(.animation(minimumInterval: 1.0 / min(prefs.graphicsQuality.backgroundFPS, 30))) { context in
                     blobs(t: context.date.timeIntervalSinceReferenceDate)
                 }
             } else {
@@ -120,6 +120,10 @@ struct AnimatedBorder: ViewModifier {
     let active: Bool
     let cornerRadius: CGFloat
     let color: Color
+    /// When false the halo never rotates — a static accent border still marks
+    /// focus, but without the per-frame recomposite. Reserved-for-Ludicrous gating
+    /// lives at the call site (graphics tier).
+    var animated: Bool = true
     @ObservedObject private var motion = MotionController.shared
     @ObservedObject private var prefs = AppPreferences.shared
 
@@ -128,8 +132,9 @@ struct AnimatedBorder: ViewModifier {
             let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
             if active {
                 // Rotating focus halo: 20 fps and frozen under reduce-motion / when
-                // the window is hidden. A static tinted border still marks focus.
-                if motion.animate && !prefs.reduceMotion {
+                // the window is hidden or the tier disables it. A static tinted
+                // border still marks focus.
+                if animated && motion.animate && !prefs.reduceMotion {
                     TimelineView(.animation(minimumInterval: 1.0 / 20.0)) { ctx in
                         border(shape, angle: Angle.degrees((ctx.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3) / 3) * 360))
                     }
@@ -155,8 +160,8 @@ struct AnimatedBorder: ViewModifier {
 }
 
 extension View {
-    func animatedBorder(active: Bool, cornerRadius: CGFloat = 12, color: Color = .accentColor) -> some View {
-        modifier(AnimatedBorder(active: active, cornerRadius: cornerRadius, color: color))
+    func animatedBorder(active: Bool, cornerRadius: CGFloat = 12, color: Color = .accentColor, animated: Bool = true) -> some View {
+        modifier(AnimatedBorder(active: active, cornerRadius: cornerRadius, color: color, animated: animated))
     }
 }
 

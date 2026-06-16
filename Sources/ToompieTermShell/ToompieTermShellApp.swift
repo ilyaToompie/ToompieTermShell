@@ -83,70 +83,7 @@ struct ToompieTermShellApp: App {
                 .frame(minWidth: 1000, minHeight: 660)
         }
         .commands {
-            CommandGroup(replacing: .appInfo) {
-                Button("About ToompieTermShell") {
-                    let credits = NSMutableAttributedString(string: "by Toompie\n")
-                    let link = NSAttributedString(
-                        string: "github.com/ilyaToompie/ToompieTermShell",
-                        attributes: [
-                            .link: URL(string: "https://github.com/ilyaToompie/ToompieTermShell")!,
-                            .foregroundColor: NSColor.linkColor
-                        ]
-                    )
-                    credits.append(link)
-                    NSApplication.shared.orderFrontStandardAboutPanel(options: [.credits: credits])
-                }
-            }
-            // Drop the default ⌘N "New Window" so it can be reused for a new terminal tab.
-            CommandGroup(replacing: .newItem) {}
-
-            CommandMenu("Terminal") {
-                Button("Command Palette") {
-                    PaletteController.shared.present(.basic)
-                }
-                .keyboardShortcut("k", modifiers: [.command])
-
-                Button("Command Palette · Advanced") {
-                    PaletteController.shared.present(.advanced)
-                }
-                .keyboardShortcut("k", modifiers: [.command, .shift])
-
-                Button("Command Palette · Super") {
-                    PaletteController.shared.present(.superA)
-                }
-                .keyboardShortcut("k", modifiers: [.command, .option])
-
-                Divider()
-
-                Button(localization("common.newTab")) {
-                    terminalManager.createTab(in: terminalManager.focusedPanelIndex)
-                }
-                .keyboardShortcut("n", modifiers: [.command])
-
-                Button(localization("common.newTab")) {
-                    terminalManager.createTab(in: terminalManager.focusedPanelIndex)
-                }
-                .keyboardShortcut("t", modifiers: [.command])
-
-                Button(localization("common.closeTab")) {
-                    terminalManager.closeActiveTab(in: terminalManager.focusedPanelIndex)
-                }
-                .keyboardShortcut("w", modifiers: [.command])
-
-                Divider()
-
-                ForEach(0..<4, id: \.self) { index in
-                    Button("\(localization("terminal.panel")) \(index + 1)") {
-                        terminalManager.focusPanel(index)
-                    }
-                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [.command])
-
-                    Button("\(localization("terminal.usePanels").replacingOccurrences(of: "%@", with: "\(index + 1)"))") {
-                        terminalManager.setVisiblePanelCount(index + 1)
-                    }
-                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [.command, .shift])
-                }
-            }
+            AppCommands(terminalManager: terminalManager, localization: localization)
         }
 
         Settings {

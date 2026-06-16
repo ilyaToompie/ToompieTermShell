@@ -45,7 +45,9 @@ struct ContentView: View {
             if !prefs.activeEffects.isEmpty {
                 WeatherLayer(
                     effects: prefs.activeEffects.map(\.rawValue).sorted().compactMap(WeatherEffect.init),
-                    tints: prefs.activeEffectTints
+                    tints: prefs.activeEffectTints,
+                    wind: prefs.weatherWindAcceleration,
+                    birthRateScale: prefs.graphicsQuality.particleScale
                 )
             }
         }
@@ -93,10 +95,13 @@ struct ContentView: View {
 private struct WeatherLayer: View {
     let effects: [WeatherEffect]
     let tints: [String: String]
+    var wind: CGVector = .zero
+    var birthRateScale: Double = 1
     @ObservedObject private var motion = MotionController.shared
 
     var body: some View {
-        WeatherOverlay(effects: effects, tints: tints, running: motion.animate)
+        WeatherOverlay(effects: effects, tints: tints, wind: wind,
+                       birthRateScale: birthRateScale, running: motion.animate)
             .allowsHitTesting(false)
             .ignoresSafeArea()
     }

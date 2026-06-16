@@ -56,7 +56,8 @@ struct AppBackground: View {
                 if prefs.bgScanlines { ScanlinesOverlay() }
             }
             .overlay {
-                if prefs.bgGrain > 0 { GrainOverlay(strength: prefs.bgGrain) }
+                // Grain animates a blend every frame; Potato tier skips it.
+                if prefs.bgGrain > 0 && prefs.graphicsQuality.grain { GrainOverlay(strength: prefs.bgGrain) }
             }
             .ignoresSafeArea()
     }
@@ -132,7 +133,9 @@ struct AppBackground: View {
 
     /// Floating decorative blobs look good behind static fills, but clash with
     /// the animated live backgrounds (which provide their own motion) and photos.
+    /// Potato tier drops them entirely (heavy 70pt blur recomposite).
     private var showsDecorBlobs: Bool {
+        guard prefs.graphicsQuality.decorBlobs else { return false }
         switch prefs.backgroundMode {
         case .native, .solid, .gradient: return true
         case .image, .animated, .gif: return false

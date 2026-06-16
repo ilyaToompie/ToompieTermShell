@@ -105,7 +105,22 @@ struct UIThemePreset: Identifiable {
         UIThemePreset(id: "lava", name: "Lava Lamp", accent: "#FF6A3D", foreground: "#FFE8D6", background: "#120604", gradientTop: "#2A0E06", gradientBottom: "#070302", effects: [], mode: .animated, live: .lavalamp),
         UIThemePreset(id: "auroraNight", name: "Aurora", accent: "#5EEAD4", foreground: "#D7FFF5", background: "#04121A", gradientTop: "#0A2A33", gradientBottom: "#030A10", effects: [], mode: .animated, live: .aurora),
         UIThemePreset(id: "deepspace", name: "Deep Space", accent: "#8B9CFF", foreground: "#DCE2FF", background: "#04040C", gradientTop: "#0B1030", gradientBottom: "#020208", effects: [.stars], mode: .animated, live: .starfield),
-        UIThemePreset(id: "vaporwave", name: "Vaporwave", accent: "#FF6AD5", foreground: "#FFF0FB", background: "#1A0B2E", gradientTop: "#3B1466", gradientBottom: "#0E0420", effects: [], mode: .animated, live: .gradientFlow)
+        UIThemePreset(id: "vaporwave", name: "Vaporwave", accent: "#FF6AD5", foreground: "#FFF0FB", background: "#1A0B2E", gradientTop: "#3B1466", gradientBottom: "#0E0420", effects: [], mode: .animated, live: .gradientFlow),
+        // New live-background + weather showcase themes
+        UIThemePreset(id: "cybergrid", name: "Cyber Grid", accent: "#FF2E97", foreground: "#F8E6FF", background: "#0A0118", gradientTop: "#2A0A4A", gradientBottom: "#060010", effects: [.matrix], mode: .animated, live: .grid),
+        UIThemePreset(id: "sunbeam", name: "Sunbeam", accent: "#FFC24B", foreground: "#FFF3DD", background: "#1A1206", gradientTop: "#3A2A0E", gradientBottom: "#0C0803", effects: [.dust], mode: .animated, live: .rays),
+        UIThemePreset(id: "silkroad", name: "Silk Road", accent: "#E0A86B", foreground: "#FBEFE0", background: "#160F0A", gradientTop: "#2E2014", gradientBottom: "#0A0705", effects: [.pollen], mode: .animated, live: .silk),
+        UIThemePreset(id: "kaleido", name: "Kaleido", accent: "#B388FF", foreground: "#F2EBFF", background: "#0E0820", gradientTop: "#241452", gradientBottom: "#060312", effects: [.glitter], mode: .animated, live: .kaleidoscope),
+        UIThemePreset(id: "koipond", name: "Koi Pond", accent: "#FF8FA3", foreground: "#EAF6FF", background: "#06141A", gradientTop: "#0C2A33", gradientBottom: "#040E12", effects: [.blossoms], mode: .animated, live: .ripplePool),
+        UIThemePreset(id: "prismatic", name: "Prismatic", accent: "#5EEAD4", foreground: "#FFFFFF", background: "#0A0A12", gradientTop: "#1A1230", gradientBottom: "#05050A", effects: [.sparkles], mode: .animated, live: .prism),
+        UIThemePreset(id: "meteorshower", name: "Meteor Shower", accent: "#8B9CFF", foreground: "#DCE2FF", background: "#03030A", gradientTop: "#0A1030", gradientBottom: "#010106", effects: [.meteors, .stars], mode: .animated, live: .starfield),
+        UIThemePreset(id: "volcano", name: "Volcano", accent: "#FF5126", foreground: "#FFE3D0", background: "#140503", gradientTop: "#320C04", gradientBottom: "#080201", effects: [.cinders], mode: .animated, live: .lavalamp),
+        UIThemePreset(id: "beegarden", name: "Bee Garden", accent: "#FFD23F", foreground: "#FBF4D8", background: "#0C1206", gradientTop: "#1E2E10", gradientBottom: "#060A03", effects: [.fireflies, .pollen], mode: .gradient),
+        UIThemePreset(id: "comettrail", name: "Comet Trail", accent: "#7AE1FF", foreground: "#E5FAFF", background: "#03060C", gradientTop: "#0A1A2E", gradientBottom: "#01030A", effects: [.comets], mode: .animated, live: .starfield),
+        UIThemePreset(id: "enchanted", name: "Enchanted", accent: "#9D7BFF", foreground: "#ECE6FF", background: "#08060F", gradientTop: "#1A1238", gradientBottom: "#050410", effects: [.wisps, .fireflies], mode: .animated, live: .nebula),
+        UIThemePreset(id: "disco", name: "Disco Fever", accent: "#FF6AD5", foreground: "#FFF0FB", background: "#14071E", gradientTop: "#3A1255", gradientBottom: "#0A0414", effects: [.confetti], mode: .animated, live: .gradientFlow),
+        UIThemePreset(id: "frostbite", name: "Frostbite", accent: "#8FD8FF", foreground: "#EAF7FF", background: "#050E16", gradientTop: "#0C2436", gradientBottom: "#03080F", effects: [.snowstorm], mode: .animated, live: .waves),
+        UIThemePreset(id: "sporebloom", name: "Spore Bloom", accent: "#5EFF9E", foreground: "#E6FFF0", background: "#04120A", gradientTop: "#0C2A18", gradientBottom: "#020A06", effects: [.spores], mode: .animated, live: .plasma)
     ]
 }
 
@@ -137,6 +152,10 @@ enum WeatherEffect: String, CaseIterable, Identifiable {
     case snowstorm
     case blossoms
     case cinders
+    case pollen
+    case comets
+    case spores
+    case wisps
 
     var id: String { rawValue }
 
@@ -171,6 +190,10 @@ enum WeatherEffect: String, CaseIterable, Identifiable {
         case .snowstorm: return "wind.snow"
         case .blossoms: return "fan.fill"
         case .cinders: return "flame.fill"
+        case .pollen: return "aqi.low"
+        case .comets: return "wand.and.rays"
+        case .spores: return "circle.grid.cross.fill"
+        case .wisps: return "humidity.fill"
         }
     }
 
@@ -181,6 +204,56 @@ enum WeatherEffect: String, CaseIterable, Identifiable {
         switch self {
         case .off, .rain, .confetti, .fireworks, .rainbow, .aurora: return false
         default: return true
+        }
+    }
+}
+
+/// Global wind direction for the particle weather overlay. `.natural` keeps each
+/// effect's hand-tuned motion; the compass cases add a steady wind force (scaled by
+/// `weatherWind`) that pushes every particle the same way, so rain can slant, snow
+/// can drift sideways, embers can lean, etc.
+enum WeatherDirection: String, CaseIterable, Identifiable {
+    case natural
+    case down
+    case up
+    case left
+    case right
+    case downLeft
+    case downRight
+    case upLeft
+    case upRight
+
+    var id: String { rawValue }
+    var labelKey: String { "wind.\(rawValue)" }
+
+    var icon: String {
+        switch self {
+        case .natural: return "wind"
+        case .down: return "arrow.down"
+        case .up: return "arrow.up"
+        case .left: return "arrow.left"
+        case .right: return "arrow.right"
+        case .downLeft: return "arrow.down.left"
+        case .downRight: return "arrow.down.right"
+        case .upLeft: return "arrow.up.left"
+        case .upRight: return "arrow.up.right"
+        }
+    }
+
+    /// Unit-ish wind vector. NOTE: the weather overlay's NSView is *not* flipped, so
+    /// +y points up and −y points down (matching CAEmitterCell acceleration).
+    var vector: CGVector {
+        let d = 0.7071 // diagonal component so combined directions stay ~unit length
+        switch self {
+        case .natural: return .zero
+        case .down: return CGVector(dx: 0, dy: -1)
+        case .up: return CGVector(dx: 0, dy: 1)
+        case .left: return CGVector(dx: -1, dy: 0)
+        case .right: return CGVector(dx: 1, dy: 0)
+        case .downLeft: return CGVector(dx: -d, dy: -d)
+        case .downRight: return CGVector(dx: d, dy: -d)
+        case .upLeft: return CGVector(dx: -d, dy: d)
+        case .upRight: return CGVector(dx: d, dy: d)
         }
     }
 }
@@ -261,6 +334,9 @@ final class AppPreferences: ObservableObject {
     @Published var gifRotation: Double { didSet { store(gifRotation, "gifRotation") } }
     @Published var gifFlip: Bool { didSet { store(gifFlip, "gifFlip") } }
     @Published var crtMode: Bool { didSet { store(crtMode, "crtMode") } }
+    @Published var graphicsModeRaw: String { didSet { store(graphicsModeRaw, "graphicsMode") } }
+    @Published var weatherDirectionRaw: String { didSet { store(weatherDirectionRaw, "weatherDirection") } }
+    @Published var weatherWind: Double { didSet { store(weatherWind, "weatherWind") } }
     @Published var schemeRaw: String { didSet { store(schemeRaw, "uiScheme") } }
     @Published var shellPath: String { didSet { store(shellPath, "shellPath") } }
     @Published var shellStartupCommand: String { didSet { store(shellStartupCommand, "shellStartupCommand") } }
@@ -360,6 +436,9 @@ final class AppPreferences: ObservableObject {
         paletteCategoryOrderRaw = d.string(forKey: "paletteCategoryOrder") ?? ""
         reduceMotion = d.bool(forKey: "reduceMotion")
         crtMode = d.bool(forKey: "crtMode")
+        graphicsModeRaw = d.string(forKey: "graphicsMode") ?? GraphicsMode.auto.rawValue
+        weatherDirectionRaw = d.string(forKey: "weatherDirection") ?? WeatherDirection.natural.rawValue
+        weatherWind = d.object(forKey: "weatherWind") == nil ? 0.5 : d.double(forKey: "weatherWind")
         schemeRaw = d.string(forKey: "uiScheme") ?? "dark"
         shellPath = d.string(forKey: "shellPath") ?? ""
         shellStartupCommand = d.string(forKey: "shellStartupCommand") ?? ""
@@ -419,6 +498,34 @@ final class AppPreferences: ObservableObject {
     var liveBackground: LiveBackground {
         get { LiveBackground(rawValue: liveBackgroundRaw) ?? .aurora }
         set { liveBackgroundRaw = newValue.rawValue }
+    }
+
+    // MARK: - Graphics quality
+
+    var graphicsMode: GraphicsMode {
+        get { GraphicsMode(rawValue: graphicsModeRaw) ?? .auto }
+        set { graphicsModeRaw = newValue.rawValue }
+    }
+
+    /// Resolved per-tier rendering knobs — what every eye-candy view reads to scale
+    /// itself. Recomputed cheaply from the current mode (and the cached RAM probe).
+    var graphicsQuality: GraphicsQuality { graphicsMode.resolvedTier.quality }
+
+    // MARK: - Weather wind
+
+    var weatherDirection: WeatherDirection {
+        get { WeatherDirection(rawValue: weatherDirectionRaw) ?? .natural }
+        set { weatherDirectionRaw = newValue.rawValue }
+    }
+
+    /// Extra constant acceleration applied to every weather particle, in the chosen
+    /// direction. Zero when direction is `.natural`. Tuned so 100% reads as a brisk
+    /// but not absurd gust.
+    var weatherWindAcceleration: CGVector {
+        guard weatherDirection != .natural else { return .zero }
+        let v = weatherDirection.vector
+        let magnitude = max(0, min(weatherWind, 1)) * 220
+        return CGVector(dx: v.dx * magnitude, dy: v.dy * magnitude)
     }
 
     // MARK: - Command palette category order

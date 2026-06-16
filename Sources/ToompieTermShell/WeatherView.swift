@@ -4,19 +4,23 @@ import SwiftUI
 struct WeatherOverlay: NSViewRepresentable {
     let effects: [WeatherEffect]
     var tints: [String: String] = [:]
+    /// Steady wind force added to every particle (from the user's direction setting).
+    var wind: CGVector = .zero
+    /// Multiplier on every emitter's birth rate (from the graphics-quality tier).
+    var birthRateScale: Double = 1
     /// When false, the particle emitters are frozen (render server stops
     /// simulating cells) — used to pause them while the window is hidden.
     var running: Bool = true
 
     func makeNSView(context: Context) -> WeatherEffectView {
         let view = WeatherEffectView()
-        view.apply(effects, tints: tints)
+        view.apply(effects, tints: tints, wind: wind, birthRateScale: birthRateScale)
         view.setRunning(running)
         return view
     }
 
     func updateNSView(_ nsView: WeatherEffectView, context: Context) {
-        nsView.apply(effects, tints: tints)
+        nsView.apply(effects, tints: tints, wind: wind, birthRateScale: birthRateScale)
         nsView.setRunning(running)
     }
 }
@@ -60,6 +64,8 @@ private struct EffectSpec {
 final class WeatherEffectView: NSView {
     private var current: Set<WeatherEffect> = []
     private var currentTints: [String: String] = [:]
+    private var currentWind: CGVector = .zero
+    private var currentBirthScale: Double = 1
     private var running = true
 
     override var isFlipped: Bool { false }
@@ -70,15 +76,20 @@ final class WeatherEffectView: NSView {
     /// view from intercepting events — this does.)
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    func apply(_ effects: [WeatherEffect], tints: [String: String] = [:]) {
+    func apply(_ effects: [WeatherEffect], tints: [String: String] = [:],
+               wind: CGVector = .zero, birthRateScale: Double = 1) {
         let incoming = Set(effects).subtracting([.off])
-        guard current != incoming || currentTints != tints else { return }
+        guard current != incoming || currentTints != tints
+            || currentWind != wind || currentBirthScale != birthRateScale else { return }
         current = incoming
         currentTints = tints
+        currentWind = wind
+        currentBirthScale = birthRateScale
         wantsLayer = true
         layer?.sublayers?.removeAll()
         for effect in incoming {
-            let emitter = makeEmitter(effect, tint: tintColor(for: effect))
+            let emitter = makeEmitter(effect, tint: tintColor(for: effect),
+                                      wind: wind, birthScale: birthRateScale)
             emitter.name = effect.rawValue
             layer?.addSublayer(emitter)
             layoutEmitter(emitter, effect: effect)
@@ -145,37 +156,42 @@ final class WeatherEffectView: NSView {
         }
     }
 
-    private func makeEmitter(_ effect: WeatherEffect, tint: NSColor?) -> CAEmitterLayer {
+    private func makeEmitter(_ effect: WeatherEffect, tint: NSColor?,
+                             wind: CGVector, birthScale: Double) -> CAEmitterLayer {
         let spec = Self.spec(for: effect)
         let emitter = CAEmitterLayer()
-        let additive: Set<WeatherEffect> = [.embers, .fireflies, .stars, .sparkles, .bokeh, .dust, .meteors, .lanterns, .glitter, .aurora, .fireworks, .cinders]
+        let additive: Set<WeatherEffect> = [.embers, .fireflies, .stars, .sparkles, .bokeh, .dust, .meteors, .lanterns, .glitter, .aurora, .fireworks, .cinders, .spores, .wisps, .comets, .pollen]
         emitter.renderMode = additive.contains(effect) ? .additive : .unordered
         emitter.beginTime = CACurrentMediaTime()
         if effect == .rain {
-            emitter.emitterCells = Self.rainCells()
+            emitter.emitterCells = Self.rainCells(wind: wind, birthScale: birthScale)
             return emitter
         }
         let colors = tint.map { [$0] } ?? spec.colors
         var cells: [CAEmitterCell] = []
         for kind in spec.kinds {
             for color in colors {
-                cells.append(Self.cell(spec: spec, kind: kind, color: color, colorCount: colors.count))
+                cells.append(Self.cell(spec: spec, kind: kind, color: color, colorCount: colors.count,
+                                       wind: wind, birthScale: birthScale))
             }
         }
         emitter.emitterCells = cells
         return emitter
     }
 
-    private static func cell(spec: EffectSpec, kind: ParticleKind, color: NSColor, colorCount: Int) -> CAEmitterCell {
+    private static func cell(spec: EffectSpec, kind: ParticleKind, color: NSColor, colorCount: Int,
+                             wind: CGVector, birthScale: Double) -> CAEmitterCell {
         let cell = CAEmitterCell()
         cell.contents = particleImage(kind: kind, color: color, size: spec.baseSize)
-        cell.birthRate = spec.birthRate / Float(max(colorCount * spec.kinds.count, 1))
+        cell.birthRate = spec.birthRate / Float(max(colorCount * spec.kinds.count, 1)) * Float(max(birthScale, 0))
         cell.lifetime = spec.lifetime
         cell.lifetimeRange = spec.lifetime * 0.3
         cell.velocity = spec.velocity
         cell.velocityRange = spec.velocityRange
-        cell.yAcceleration = spec.yAcceleration
-        cell.xAcceleration = spec.xAcceleration
+        // Wind is added on top of the effect's own gravity/drift so it slants in the
+        // chosen direction without erasing its hand-tuned vertical motion.
+        cell.yAcceleration = spec.yAcceleration + wind.dy
+        cell.xAcceleration = spec.xAcceleration + wind.dx
         cell.emissionLongitude = spec.emissionLongitude
         cell.emissionRange = spec.emissionRange
         cell.scale = spec.scale
@@ -244,10 +260,18 @@ final class WeatherEffectView: NSView {
             return EffectSpec(kinds: [.leaf], colors: [NSColor(calibratedRed: 1, green: 0.75, blue: 0.85, alpha: 1), NSColor(calibratedRed: 1, green: 0.6, blue: 0.78, alpha: 1), NSColor(calibratedRed: 1, green: 0.85, blue: 0.9, alpha: 1)], birthRate: 16, lifetime: 13, velocity: 42, velocityRange: 22, yAcceleration: -30, xAcceleration: 20, emissionLongitude: .pi, emissionRange: 0.7, scale: 0.5, scaleRange: 0.3, spin: 1.5, spinRange: 2.2, origin: .top, baseSize: 18)
         case .cinders:
             return EffectSpec(kinds: [.dot], colors: [NSColor(calibratedRed: 1, green: 0.55, blue: 0.2, alpha: 1), NSColor(calibratedRed: 1, green: 0.3, blue: 0.1, alpha: 1), NSColor(calibratedRed: 1, green: 0.8, blue: 0.4, alpha: 1)], birthRate: 18, lifetime: 9, velocity: 50, velocityRange: 30, yAcceleration: 26, xAcceleration: 14, emissionLongitude: .pi / 2, emissionRange: 0.7, scale: 0.3, scaleRange: 0.2, scaleSpeed: -0.02, alphaSpeed: -0.08, origin: .bottom, baseSize: 18)
+        case .pollen:
+            return EffectSpec(kinds: [.dot], colors: [NSColor(calibratedRed: 0.95, green: 0.9, blue: 0.45, alpha: 0.8), NSColor(calibratedRed: 0.8, green: 0.95, blue: 0.5, alpha: 0.7)], birthRate: 18, lifetime: 16, velocity: 10, velocityRange: 10, yAcceleration: -3, xAcceleration: 6, emissionLongitude: 0, emissionRange: .pi * 2, scale: 0.12, scaleRange: 0.08, alphaSpeed: -0.04, alphaRange: 0.3, origin: .area, baseSize: 10)
+        case .comets:
+            return EffectSpec(kinds: [.rainLine], colors: [.white, NSColor(calibratedRed: 0.6, green: 0.85, blue: 1, alpha: 1), NSColor(calibratedRed: 0.85, green: 0.7, blue: 1, alpha: 1)], birthRate: 4, lifetime: 5, velocity: 360, velocityRange: 110, yAcceleration: -120, xAcceleration: -160, emissionLongitude: -.pi / 2 - 0.7, emissionRange: 0.05, scale: 0.8, scaleRange: 0.3, alphaSpeed: -0.12, origin: .top, baseSize: 30)
+        case .spores:
+            return EffectSpec(kinds: [.dot], colors: [NSColor(calibratedRed: 0.5, green: 1, blue: 0.7, alpha: 0.7), NSColor(calibratedRed: 0.7, green: 1, blue: 0.9, alpha: 0.6)], birthRate: 14, lifetime: 13, velocity: 28, velocityRange: 16, yAcceleration: 8, xAcceleration: 5, emissionLongitude: .pi / 2, emissionRange: 0.9, scale: 0.16, scaleRange: 0.14, alphaSpeed: -0.05, alphaRange: 0.3, origin: .bottom, baseSize: 14)
+        case .wisps:
+            return EffectSpec(kinds: [.dot], colors: [NSColor(calibratedRed: 0.6, green: 0.8, blue: 1, alpha: 0.22), NSColor(calibratedRed: 0.8, green: 0.7, blue: 1, alpha: 0.2)], birthRate: 5, lifetime: 16, velocity: 26, velocityRange: 14, yAcceleration: 0, xAcceleration: 8, emissionLongitude: 0, emissionRange: 0.5, scale: 2.2, scaleRange: 1.0, scaleSpeed: 0.05, alphaSpeed: -0.014, origin: .area, baseSize: 56)
         }
     }
 
-    private static func rainCells() -> [CAEmitterCell] {
+    private static func rainCells(wind: CGVector, birthScale: Double) -> [CAEmitterCell] {
         let drop = NSColor(calibratedRed: 0.78, green: 0.86, blue: 1.0, alpha: 1.0)
         let image = particleImage(kind: .rainLine, color: drop, size: 30)
         let layers: [(scale: CGFloat, velocity: CGFloat, alpha: CGFloat, birth: Float, life: Float)] = [
@@ -258,12 +282,13 @@ final class WeatherEffectView: NSView {
         return layers.map { layer in
             let cell = CAEmitterCell()
             cell.contents = image
-            cell.birthRate = layer.birth
+            cell.birthRate = layer.birth * Float(max(birthScale, 0))
             cell.lifetime = layer.life
             cell.lifetimeRange = layer.life * 0.3
             cell.velocity = layer.velocity
             cell.velocityRange = layer.velocity * 0.18
-            cell.yAcceleration = -900
+            cell.yAcceleration = -900 + wind.dy
+            cell.xAcceleration = wind.dx
             cell.emissionLongitude = -.pi / 2 - 0.12
             cell.emissionRange = 0.04
             cell.scale = layer.scale

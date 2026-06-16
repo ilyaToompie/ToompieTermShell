@@ -121,8 +121,13 @@ struct TerminalPanelView: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .animatedBorder(active: isFocused, cornerRadius: 12, color: prefs.accentColor)
-        .shadow(color: isFocused ? prefs.accentColor.opacity(0.32) : .clear, radius: 12, y: 2)
+        // Graphics tier decides how heavy the focus treatment is: only Ludicrous
+        // animates the rotating halo (the main idle-cost offender), and the accent
+        // glow scales from off (Potato) to full (Ludicrous).
+        .animatedBorder(active: isFocused, cornerRadius: 12, color: prefs.accentColor,
+                        animated: prefs.graphicsQuality.animatedFocusBorder)
+        .shadow(color: isFocused && prefs.graphicsQuality.focusGlow ? prefs.accentColor.opacity(0.32) : .clear,
+                radius: prefs.graphicsQuality.focusGlowRadius, y: 2)
         .contentShape(Rectangle())
         .onTapGesture {
             terminalManager.focusPanel(panel.index)

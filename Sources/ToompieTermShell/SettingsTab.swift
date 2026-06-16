@@ -23,6 +23,7 @@ struct SettingsTab: View {
             VStack(alignment: .leading, spacing: 16) {
                 languageCard
                 presetsCard
+                graphicsCard
                 interfaceCard
                 cliCard
                 gifCard
@@ -158,6 +159,51 @@ struct SettingsTab: View {
         .glass()
     }
 
+    private var graphicsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader("settings.graphics", "speedometer")
+            Text(loc("settings.graphicsHint")).font(.caption).foregroundStyle(.secondary)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 8)], spacing: 8) {
+                ForEach(GraphicsMode.allCases) { mode in
+                    graphicsChip(mode)
+                }
+            }
+            HStack(spacing: 6) {
+                Image(systemName: "memorychip")
+                Text(graphicsResolvedText)
+            }
+            .font(.caption).foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .glass()
+    }
+
+    private var graphicsResolvedText: String {
+        let tierName = loc("graphics.\(prefs.graphicsMode.resolvedTier.rawValue)")
+        return String(format: loc("settings.graphicsResolved"), SystemGraphics.memoryGB, tierName)
+    }
+
+    private func graphicsChip(_ mode: GraphicsMode) -> some View {
+        let active = prefs.graphicsMode == mode
+        return Button {
+            prefs.graphicsMode = mode
+        } label: {
+            VStack(spacing: 4) {
+                Image(systemName: mode.icon).font(.system(size: 15))
+                Text(loc(mode.labelKey)).font(.caption2.weight(.medium)).lineLimit(1).minimumScaleFactor(0.7)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 48)
+            .background(active ? Color.accentColor.opacity(0.25) : Color.white.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 9).stroke(active ? Color.accentColor : Color.white.opacity(0.1)))
+            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(active ? Color.accentColor : Color.secondary)
+        .hoverScale(1.05)
+    }
+
     private var interfaceCard: some View {
         VStack(alignment: .leading, spacing: 12) {
             sectionHeader("settings.textCase", "textformat.size")
@@ -186,6 +232,17 @@ struct SettingsTab: View {
                 ForEach(WeatherEffect.allCases) { effect in
                     effectChip(effect)
                 }
+            }
+
+            Divider().opacity(0.2)
+            Text(loc("settings.weatherDirection")).font(.callout.weight(.medium))
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 62), spacing: 6)], spacing: 6) {
+                ForEach(WeatherDirection.allCases) { dir in
+                    weatherDirectionChip(dir)
+                }
+            }
+            if prefs.weatherDirection != .natural {
+                slider(loc("settings.windStrength"), value: $prefs.weatherWind, range: 0...1, percent: true)
             }
 
             let tintables = prefs.activeEffects.filter(\.tintable).sorted { $0.rawValue < $1.rawValue }
@@ -255,6 +312,27 @@ struct SettingsTab: View {
             .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 9).stroke(active ? Color.accentColor : Color.white.opacity(0.1)))
             .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(active ? Color.accentColor : Color.secondary)
+        .hoverScale(1.05)
+    }
+
+    private func weatherDirectionChip(_ dir: WeatherDirection) -> some View {
+        let active = prefs.weatherDirection == dir
+        return Button {
+            prefs.weatherDirection = dir
+        } label: {
+            VStack(spacing: 2) {
+                Image(systemName: dir.icon).font(.system(size: 13))
+                Text(loc(dir.labelKey)).font(.system(size: 9, weight: .medium)).lineLimit(1).minimumScaleFactor(0.6)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 40)
+            .background(active ? Color.accentColor.opacity(0.25) : Color.white.opacity(0.05))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(active ? Color.accentColor : Color.white.opacity(0.1)))
+            .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
         .foregroundStyle(active ? Color.accentColor : Color.secondary)

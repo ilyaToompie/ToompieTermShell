@@ -13,6 +13,12 @@ enum LiveBackground: String, CaseIterable, Identifiable {
     case starfield
     case waves
     case gradientFlow
+    case rays
+    case grid
+    case silk
+    case kaleidoscope
+    case ripplePool
+    case prism
 
     var id: String { rawValue }
     var labelKey: String { "live.\(rawValue)" }
@@ -27,6 +33,12 @@ enum LiveBackground: String, CaseIterable, Identifiable {
         case .starfield: return "sparkles"
         case .waves: return "water.waves"
         case .gradientFlow: return "drop.fill"
+        case .rays: return "sun.max.fill"
+        case .grid: return "grid"
+        case .silk: return "wind"
+        case .kaleidoscope: return "snowflake"
+        case .ripplePool: return "drop.circle.fill"
+        case .prism: return "rainbow"
         }
     }
 }
@@ -80,7 +92,9 @@ struct LiveBackgroundView: View {
     var body: some View {
         Group {
             if motion.animate && !prefs.reduceMotion {
-                TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                // Frame cap is set by the graphics tier — Potato idles at 15 fps,
+                // Ludicrous runs at 60. (High, the >8 GB default, keeps the old 30.)
+                TimelineView(.animation(minimumInterval: 1.0 / prefs.graphicsQuality.backgroundFPS)) { context in
                     frame(t: context.date.timeIntervalSinceReferenceDate * max(0.05, speed))
                 }
             } else {
@@ -111,6 +125,12 @@ struct LiveBackgroundView: View {
         case .starfield:     starfield(t: t)
         case .waves:         waves(t: t)
         case .gradientFlow:  gradientFlow(t: t)
+        case .rays:          rays(t: t)
+        case .grid:          grid(t: t)
+        case .silk:          silk(t: t)
+        case .kaleidoscope:  kaleidoscope(t: t)
+        case .ripplePool:    ripplePool(t: t)
+        case .prism:         prism(t: t)
         }
     }
 
@@ -235,10 +255,10 @@ struct LiveBackgroundView: View {
     }
 
     private func starfield(t: Double) -> some View {
-        Canvas { ctx, size in
+        let count = Int(160 * prefs.graphicsQuality.starCountScale)
+        return Canvas { ctx, size in
             guard size.width > 0, size.height > 0 else { return }
             ctx.blendMode = .plusLighter
-            let count = 160
             let driftSpeed = 18.0 + 50.0 * intensity
             for i in 0..<count {
                 let sx = hash01(i) * size.width
@@ -294,6 +314,178 @@ struct LiveBackgroundView: View {
         )
         .hueRotation(.degrees(t * (8 + 22 * intensity)))
         .opacity(0.95)
+    }
+
+    // MARK: - Added styles
+
+    /// Slow-rotating volumetric "god rays" fanning out from a source near the top.
+    private func rays(t: Double) -> some View {
+        Canvas { ctx, size in
+            guard size.width > 0, size.height > 0 else { return }
+            ctx.addFilter(.blur(radius: 26))
+            ctx.blendMode = .plusLighter
+            let center = CGPoint(x: size.width * 0.5, y: -size.height * 0.15)
+            let count = 14
+            let maxR = hypot(size.width, size.height) * 1.5
+            let palette = [accent, top, accent.opacity(0.75), bottom]
+            for i in 0..<count {
+                let base = Double(i) / Double(count) * .pi * 2
+                let sweep = 0.05 + 0.035 * (0.5 + 0.5 * sin(t * 0.6 + Double(i)))
+                let a = base + t * 0.08
+                var path = Path()
+                path.move(to: center)
+                path.addLine(to: CGPoint(x: center.x + cos(a - sweep) * maxR,
+                                         y: center.y + sin(a - sweep) * maxR))
+                path.addLine(to: CGPoint(x: center.x + cos(a + sweep) * maxR,
+                                         y: center.y + sin(a + sweep) * maxR))
+                path.closeSubpath()
+                let c = palette[i % palette.count]
+                ctx.fill(path, with: .radialGradient(
+                    Gradient(colors: [c.opacity(0.30 + 0.16 * intensity), c.opacity(0)]),
+                    center: center, startRadius: 0, endRadius: maxR))
+            }
+        }
+        .opacity(0.9)
+    }
+
+    /// Retro synthwave perspective grid scrolling toward the viewer.
+    private func grid(t: Double) -> some View {
+        Canvas { ctx, size in
+            guard size.width > 0, size.height > 0 else { return }
+            ctx.blendMode = .plusLighter
+            let horizon = size.height * 0.5
+            let vp = CGPoint(x: size.width / 2, y: horizon)
+            let line = accent
+            // Sun glow sitting on the horizon.
+            let sunR = size.width * 0.18
+            ctx.fill(
+                Path(ellipseIn: CGRect(x: vp.x - sunR, y: horizon - sunR, width: sunR * 2, height: sunR * 2)),
+                with: .radialGradient(Gradient(colors: [top.opacity(0.5), top.opacity(0)]),
+                                      center: vp, startRadius: 0, endRadius: sunR))
+            // Vertical lines converging to the vanishing point.
+            let cols = 14
+            for i in -cols...cols {
+                let xBottom = vp.x + CGFloat(i) * size.width / CGFloat(cols)
+                var p = Path()
+                p.move(to: CGPoint(x: xBottom, y: size.height))
+                p.addLine(to: vp)
+                ctx.stroke(p, with: .color(line.opacity(0.22)), lineWidth: 1)
+            }
+            // Horizontal lines bunching toward the horizon, scrolling outward.
+            let rows = 16
+            let scroll = (t * 0.3).truncatingRemainder(dividingBy: 1.0)
+            for i in 0..<rows {
+                let f = (Double(i) + scroll) / Double(rows)
+                let y = horizon + pow(f, 2.2) * (size.height - horizon)
+                var p = Path()
+                p.move(to: CGPoint(x: 0, y: y))
+                p.addLine(to: CGPoint(x: size.width, y: y))
+                ctx.stroke(p, with: .color(line.opacity(0.12 + 0.45 * f)), lineWidth: 1 + f)
+            }
+        }
+        .opacity(0.85)
+    }
+
+    /// Soft overlapping ribbons that warp like flowing silk.
+    private func silk(t: Double) -> some View {
+        Canvas { ctx, size in
+            guard size.width > 0, size.height > 0 else { return }
+            ctx.addFilter(.blur(radius: 34))
+            ctx.blendMode = .plusLighter
+            let palette = [accent, top, bottom, accent.opacity(0.8)]
+            let bands = 5
+            let amp = size.height * (0.05 + 0.07 * intensity)
+            for i in 0..<bands {
+                func wave(_ x: Double, offset: Double) -> Double {
+                    let yBase = size.height * (0.12 + 0.17 * Double(i)) + offset
+                    return yBase
+                        + sin(x / 220 + t * 0.7 + Double(i) * 0.9) * amp
+                        + sin(x / 70 - t * 0.5 + Double(i)) * amp * 0.4
+                }
+                var path = Path()
+                path.move(to: CGPoint(x: 0, y: wave(0, offset: 0)))
+                var x = 0.0
+                while x <= size.width { path.addLine(to: CGPoint(x: x, y: wave(x, offset: 0))); x += 14 }
+                let thickness = size.height * 0.12
+                x = size.width
+                while x >= 0 { path.addLine(to: CGPoint(x: x, y: wave(x, offset: thickness))); x -= 14 }
+                path.closeSubpath()
+                ctx.fill(path, with: .color(palette[i % palette.count].opacity(0.26)))
+            }
+        }
+        .opacity(0.9)
+    }
+
+    /// Mirror-symmetric drifting blobs — a slowly turning kaleidoscope.
+    private func kaleidoscope(t: Double) -> some View {
+        Canvas { ctx, size in
+            guard size.width > 0, size.height > 0 else { return }
+            ctx.addFilter(.blur(radius: 20))
+            ctx.blendMode = .plusLighter
+            let center = CGPoint(x: size.width / 2, y: size.height / 2)
+            let segments = 8
+            let palette = [accent, top, bottom]
+            for s in 0..<segments {
+                var slice = ctx
+                slice.translateBy(x: center.x, y: center.y)
+                slice.rotate(by: .radians(Double(s) / Double(segments) * .pi * 2 + t * 0.2))
+                for i in 0..<3 {
+                    let r = size.width * (0.10 + 0.05 * Double(i))
+                    let dist = size.width * (0.10 + 0.09 * Double(i)) * (1 + 0.2 * sin(t * 0.6 + Double(i)))
+                    let cx = cos(t * 0.4 + Double(i)) * dist * 0.5
+                    let cy = sin(t * 0.5 + Double(i) * 1.3) * dist * 0.3 + dist
+                    let rect = CGRect(x: cx - r, y: cy - r, width: r * 2, height: r * 2)
+                    let c = palette[(s + i) % palette.count]
+                    slice.fill(Path(ellipseIn: rect), with: .radialGradient(
+                        Gradient(colors: [c.opacity(0.5), c.opacity(0)]),
+                        center: CGPoint(x: cx, y: cy), startRadius: 0, endRadius: r))
+                }
+            }
+        }
+        .opacity(0.9)
+    }
+
+    /// Concentric ripples spreading from a few points, like rain on still water.
+    private func ripplePool(t: Double) -> some View {
+        Canvas { ctx, size in
+            guard size.width > 0, size.height > 0 else { return }
+            ctx.blendMode = .plusLighter
+            let palette = [accent, top, bottom, accent]
+            let sources = 5
+            for s in 0..<sources {
+                let cx = (0.18 + 0.64 * hash01(s * 7)) * size.width
+                let cy = (0.18 + 0.64 * hash01(s * 7 + 3)) * size.height
+                let period = 2.4 + hash01(s + 1) * 2.2
+                let rings = 4
+                for k in 0..<rings {
+                    let phase = (t / period + Double(k) / Double(rings)).truncatingRemainder(dividingBy: 1)
+                    let radius = phase * size.width * 0.34
+                    let alpha = (1 - phase) * (0.45 + 0.3 * intensity)
+                    let rect = CGRect(x: cx - radius, y: cy - radius, width: radius * 2, height: radius * 2)
+                    ctx.stroke(Path(ellipseIn: rect), with: .color(palette[s % palette.count].opacity(alpha)),
+                               lineWidth: 1.5 + 1.5 * (1 - phase))
+                }
+            }
+        }
+        .opacity(0.85)
+    }
+
+    /// A slow, full-spectrum rainbow sweep with continuous hue rotation.
+    private func prism(t: Double) -> some View {
+        let rainbow: [Color] = [
+            Color(red: 1, green: 0.35, blue: 0.4), Color(red: 1, green: 0.62, blue: 0.3),
+            Color(red: 1, green: 0.9, blue: 0.35), Color(red: 0.4, green: 0.85, blue: 0.5),
+            Color(red: 0.35, green: 0.7, blue: 1), Color(red: 0.7, green: 0.45, blue: 1),
+            Color(red: 1, green: 0.35, blue: 0.4),
+        ]
+        let angle = t * 0.18
+        return LinearGradient(
+            colors: rainbow,
+            startPoint: UnitPoint(x: 0.5 + 0.5 * cos(angle), y: 0.5 + 0.5 * sin(angle)),
+            endPoint: UnitPoint(x: 0.5 - 0.5 * cos(angle), y: 0.5 - 0.5 * sin(angle))
+        )
+        .hueRotation(.degrees(t * (16 + 34 * intensity)))
+        .opacity(0.7)
     }
 }
 
