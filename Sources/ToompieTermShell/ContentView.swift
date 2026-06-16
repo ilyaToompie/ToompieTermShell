@@ -8,6 +8,7 @@ struct ContentView: View {
     @StateObject private var gifStore = GifInstanceStore.shared
     @StateObject private var cli = CLILauncher.shared
     @StateObject private var chrome = UIChrome.shared
+    @StateObject private var game = TirGameController.shared
     @AppStorage("lastSelectedSidebarTab") private var selectedSidebarTabRawValue = SidebarTab.ssh.rawValue
     @AppStorage("sidebarWidth") private var sidebarWidth = 320.0
 
@@ -68,7 +69,15 @@ struct ContentView: View {
                 CLIInstallPrompt()
             }
         }
+        // тир minigame: floats above the terminal with its own dark scrim.
+        .overlay {
+            if game.phase != .idle {
+                TirGameOverlay()
+                    .transition(.opacity)
+            }
+        }
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: cli.shouldShowPrompt)
+        .animation(.easeInOut(duration: 0.28), value: game.phase)
         .animation(.easeInOut(duration: 0.25), value: chrome.hidden)
         .navigationTitle(windowTitle)
         .sheet(isPresented: $palette.open) {
@@ -76,8 +85,11 @@ struct ContentView: View {
         }
         .tint(prefs.accentColor)
         .dynamicTypeSize(prefs.textCase == .large ? .xxLarge : .large)
-        // Safety net: Escape restores the UI if it was hidden via a GIF tap.
-        .onExitCommand { if chrome.hidden { chrome.hidden = false } }
+        // Escape: hand off to the game first (pause / close), else restore hidden UI.
+        .onExitCommand {
+            if game.phase != .idle { game.handleEscape() }
+            else if chrome.hidden { chrome.hidden = false }
+        }
     }
 
     private var windowTitle: String {

@@ -8,6 +8,9 @@ import SwiftUI
 struct AppCommands: Commands {
     @ObservedObject var terminalManager: TerminalWorkspaceManager
     @ObservedObject var localization: LocalizationManager
+    @ObservedObject var prefs = AppPreferences.shared
+    @ObservedObject var health = HealthReminders.shared
+    @ObservedObject var stats = SessionStats.shared
     @AppStorage("lastSelectedSidebarTab") private var selectedSidebarTabRawValue = SidebarTab.ssh.rawValue
 
     private static let githubURL = URL(string: "https://github.com/ilyaToompie/ToompieTermShell")!
@@ -70,6 +73,86 @@ struct AppCommands: Commands {
                 .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: [.command, .shift])
             }
         }
+
+        // Grouped: CommandsBuilder permits at most 10 top-level members.
+        Group {
+        // ── Fun menu ──────────────────────────────────────────────────────
+        CommandMenu(localization("menu.fun")) {
+            Button(localization("menu.fun.tir")) { TirGameController.shared.present() }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+        }
+
+        // ── Health menu ───────────────────────────────────────────────────
+        CommandMenu(localization("menu.health")) {
+            ForEach(HealthReminderKind.allCases) { kind in
+                Toggle(isOn: Binding(
+                    get: { health.isEnabled(kind) },
+                    set: { health.setEnabled($0, for: kind) }
+                )) {
+                    Text("\(kind.emoji)  \(localization(kind.labelKey))")
+                }
+            }
+            Divider()
+            Button(localization("menu.health.test")) {
+                let kind = HealthReminderKind.allCases.first { health.isEnabled($0) } ?? .water
+                health.fireNow(kind)
+            }
+            Button(localization("menu.health.disableAll")) { health.disableAll() }
+                .disabled(!health.anyEnabled)
+        }
+
+        // ── Tools menu ────────────────────────────────────────────────────
+        CommandMenu(localization("menu.tools")) {
+            Button(localization("tools.insertUUID")) { MenuActions.insertUUID() }
+            Button(localization("tools.copyUUID")) { MenuActions.copyUUID() }
+            Divider()
+            Button(localization("tools.insertTimestamp")) { MenuActions.insertUnixTimestamp() }
+            Button(localization("tools.insertISO")) { MenuActions.insertISODate() }
+            Divider()
+            Button(localization("tools.base64Encode")) { MenuActions.base64EncodeClipboard() }
+            Button(localization("tools.base64Decode")) { MenuActions.base64DecodeClipboard() }
+            Button(localization("tools.urlEncode")) { MenuActions.urlEncodeClipboard() }
+            Button(localization("tools.urlDecode")) { MenuActions.urlDecodeClipboard() }
+            Button(localization("tools.jsonPretty")) { MenuActions.prettyPrintJSONClipboard() }
+            Divider()
+            Button(localization("tools.password")) { MenuActions.copyRandomPassword() }
+            Button(localization("tools.lorem")) { MenuActions.copyLoremIpsum() }
+            Button(localization("tools.wordCount")) { MenuActions.clipboardWordCount() }
+        }
+
+        // ── Stats menu (live session + lifetime counters) ─────────────────
+        CommandMenu(localization("menu.stats")) {
+            Text("\(localization("stats.uptime")): \(stats.uptimeString)")
+            Text("\(localization("stats.tabsOpened")): \(stats.tabsOpened)")
+            Text("\(localization("stats.paletteOpens")): \(stats.paletteOpens)")
+            Text("\(localization("stats.themeShuffles")): \(stats.themeShuffles)")
+            Text("\(localization("stats.games")): \(stats.gamesPlayed)")
+            Divider()
+            Text("\(localization("stats.targetsHit")): \(stats.targetsHit)")
+            Text("\(localization("stats.highScore")): \(stats.tirHighScore)")
+            Text("\(localization("stats.bestStreak")): \(stats.tirBestStreak)")
+            Divider()
+            Button(localization("stats.reset")) { stats.resetLifetime() }
+        }
+
+        // ── Vibes menu ────────────────────────────────────────────────────
+        CommandMenu(localization("menu.vibes")) {
+            Button(localization("vibes.shuffle")) { MenuActions.shuffleTheme() }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+            Button(localization("vibes.cinema")) { MenuActions.toggleCinema() }
+            Divider()
+            Button(localization("vibes.randomEffect")) { MenuActions.randomWeatherEffect() }
+            Button(localization("vibes.clearEffects")) { MenuActions.clearWeatherEffects() }
+            Divider()
+            Button(localization("vibes.cycleGraphics")) { MenuActions.cycleGraphicsMode() }
+            Toggle(isOn: Binding(get: { prefs.reduceMotion }, set: { _ in MenuActions.toggleReduceMotion() })) {
+                Text(localization("vibes.reduceMotion"))
+            }
+            Toggle(isOn: Binding(get: { prefs.crtMode }, set: { _ in MenuActions.toggleCRT() })) {
+                Text(localization("vibes.crt"))
+            }
+        }
+        }   // end Group
 
         // ── View menu ─────────────────────────────────────────────────────
         CommandGroup(after: .sidebar) {

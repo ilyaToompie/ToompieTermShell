@@ -82,6 +82,7 @@ final class PaletteController: ObservableObject {
     func present(_ level: PaletteLevel = .basic) {
         self.level = level
         open = true
+        SessionStats.shared.record(.paletteOpened)
     }
 }
 

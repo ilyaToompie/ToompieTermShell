@@ -137,6 +137,7 @@ final class TerminalWorkspaceManager: ObservableObject {
         panel.selectedTabID = tab.id
         focusPanel(panelIndex)
         updateDockBadge()
+        SessionStats.shared.record(.tabOpened)
 
         let shell = prefs.resolvedShell()
         let base = URL(fileURLWithPath: shell).lastPathComponent
@@ -172,6 +173,7 @@ final class TerminalWorkspaceManager: ObservableObject {
         panel.tabs.removeAll { $0.id == selected.id }
         panel.selectedTabID = panel.tabs.last?.id
         updateDockBadge()
+        SessionStats.shared.record(.tabClosed)
     }
 
     @discardableResult
